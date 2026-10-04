@@ -1,0 +1,38 @@
+{
+  "name": "n8n-automation-project",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node.js replication of the n8n 'Video Script Generation Flow Agentic v4' workflow (Zl1MpttLGWdWFqRU): Research -> Idea -> Script (per-concept) -> Storyboard, with Airtable + Telegram + Gemini.",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "vite build",
+    "prestart": "node scripts/ensure-ui-build.mjs",
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "dev:ui": "vite",
+    "pipeline": "node src/runPipeline.js",
+    "storyboard": "node src/runStoryboard.js",
+    "recover-ideas": "node src/runIdeaRecovery.js",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "test:ui": "npm run build && playwright test",
+    "test:all": "npm test && npm run test:ui"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "airtable": "^0.12.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.2"
+  }
+}

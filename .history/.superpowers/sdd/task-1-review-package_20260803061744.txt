@@ -1,0 +1,123 @@
+=== src/config.js (full, after Task 1) ===
+import 'dotenv/config';
+
+function required(name) {
+  const v = process.env[name];
+  if (!v) {
+    // Do not throw at import time for every var — some flows only need a subset.
+    // Callers that truly require a value should read config and validate.
+    return '';
+  }
+  return v;
+}
+
+// GEMINI_API_KEYS is comma-separated; the legacy single GEMINI_API_KEY is
+// merged in so existing .env files keep working. Order/duplicates don't matter
+// (the pool dedupes and rotates by idle time).
+function geminiApiKeys() {
+  const keys = [
+    ...(process.env.GEMINI_API_KEYS || '').split(','),
+    process.env.GEMINI_API_KEY || '',
+  ]
+    .map((k) => k.trim())
+    .filter(Boolean);
+  return [...new Set(keys)];
+}
+
+export const config = {
+  gemini: {
+    apiKeys: geminiApiKeys(),
+    // Per-key cooldown between uses (default 5 min). Set 0 to disable.
+    keyCooldownMs: process.env.GEMINI_KEY_COOLDOWN_MS !== undefined
+      ? Number(process.env.GEMINI_KEY_COOLDOWN_MS)
+      : 5 * 60_000,
+    modelPrimary: process.env.GEMINI_MODEL_PRIMARY || 'gemini-3.5-flash',
+    modelFallback: process.env.GEMINI_MODEL_FALLBACK || 'gemini-3.1-flash-lite',
+  },
+  // yt-dlp Trend Scout (Node-only addition; not part of the n8n workflow).
+  ytdlp: {
+    path: process.env.YTDLP_PATH || 'yt-dlp',
+    searchLimit: Number(process.env.YTDLP_SEARCH_LIMIT || 15),
+    timeoutMs: Number(process.env.YTDLP_TIMEOUT_MS || 60_000),
+    // Default on; set TREND_SCOUT_ENABLED=false to skip the scout entirely.
+    enabled: process.env.TREND_SCOUT_ENABLED !== 'false',
+  },
+  airtable: {
+    apiKey: required('AIRTABLE_API_KEY'),
+    // typecast lets Airtable coerce near-miss values (numeric strings into
+    // number columns, new singleSelect options) instead of rejecting the
+    // whole record. Set AIRTABLE_TYPECAST=false to disable.
+    typecast: process.env.AIRTABLE_TYPECAST !== 'false',
+    baseId: process.env.AIRTABLE_BASE_ID || 'appnBhwjEiHrAZpaa',
+    tables: {
+      projects: process.env.AIRTABLE_TABLE_PROJECTS || 'Projects',
+      ideas: process.env.AIRTABLE_TABLE_IDEAS || 'Ideas',
+      scripts: process.env.AIRTABLE_TABLE_SCRIPTS || 'Scripts',
+      // NOTE: the live Airtable table really is misspelled "Stroyboard".
+      storyboards: process.env.AIRTABLE_TABLE_STORYBOARDS || 'Stroyboard',
+    },
+  },
+  telegram: {
+    botToken: required('TELEGRAM_BOT_TOKEN'),
+    chatId: process.env.TELEGRAM_CHAT_ID || '6626378722',
+  },
+  server: {
+    port: Number(process.env.PORT || 3000),
+  },
+  pipeline: {
+    conceptCount: Number(process.env.IDEA_CONCEPT_COUNT || 10),
+    // In-process storyboard poll interval (replaces the n8n Schedule Trigger,
+    // 15 min there). 0/unset = off; use `npm run storyboard` + cron instead.
+    storyboardPollMs: Number(process.env.STORYBOARD_POLL_MS || 0),
+  },
+};
+
+=== .env.example (full, after Task 1) ===
+# ---- Google Gemini (googlePalmApi in n8n) ----
+# Comma-separated list; each key is used at most once per cooldown window,
+# so more keys = more calls per window. Legacy single GEMINI_API_KEY still works.
+GEMINI_API_KEYS=
+# Per-key cooldown in ms (default 60000 = 1 min; 0 disables rotation waits).
+GEMINI_KEY_COOLDOWN_MS=60000
+
+# Primary + fallback models, mirroring the workflow's Gemini nodes.
+GEMINI_MODEL_PRIMARY=gemini-3.5-flash
+GEMINI_MODEL_FALLBACK=gemini-3.1-flash-lite
+
+# ---- Airtable ----
+# A personal access token (pat...), NOT a legacy key... API key (retired Feb 2024).
+# Needs data.records:read + data.records:write scopes and the base added as a resource.
+AIRTABLE_API_KEY=
+AIRTABLE_BASE_ID=appnBhwjEiHrAZpaa
+AIRTABLE_TABLE_PROJECTS=Projects
+AIRTABLE_TABLE_IDEAS=Ideas
+AIRTABLE_TABLE_SCRIPTS=Scripts
+AIRTABLE_TABLE_STORYBOARDS=Storyboard
+
+# Server-side coercion of near-miss values on writes (numeric strings, new
+# select options). Default on; set false to get strict type errors instead.
+AIRTABLE_TYPECAST=true
+
+# ---- Telegram ----
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=6626378722
+
+# ---- Server ----
+PORT=3000
+
+# Number of concepts the Idea Agent should produce (workflow uses 10).
+IDEA_CONCEPT_COUNT=10
+
+# In-process storyboard poll interval in ms for the server (0/unset = off).
+# Alternative: cron `npm run storyboard`. The n8n Schedule Trigger used 15 min.
+STORYBOARD_POLL_MS=0
+
+# ---- yt-dlp Trend Scout (optional; degrades gracefully if missing) ----
+# Path to the yt-dlp binary (must be installed separately: pip install yt-dlp).
+YTDLP_PATH=yt-dlp
+# Search results per planned query (max 5 queries, 50 videos total).
+YTDLP_SEARCH_LIMIT=15
+# Per-query hard timeout in ms.
+YTDLP_TIMEOUT_MS=60000
+# Set false to skip the Trend Scout stage entirely.
+TREND_SCOUT_ENABLED=true

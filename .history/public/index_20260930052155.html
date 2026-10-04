@@ -1,0 +1,960 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Content Production Dashboard</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0d14;
+        --panel: #121722;
+        --panel2: #171e2c;
+        --border: #283247;
+        --text: #edf1f8;
+        --muted: #8e9ab0;
+        --accent: #7c9cff;
+        --accent2: #4de2b1;
+        --danger: #ff7587;
+        --warn: #ffc66d;
+        --shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 80% -10%, #1a2850 0, transparent 35%),
+          var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 Inter,
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+      button {
+        border: 0;
+        cursor: pointer;
+      }
+      .shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 270px 1fr;
+      }
+      aside {
+        border-right: 1px solid var(--border);
+        background: rgba(10, 13, 20, 0.86);
+        padding: 24px 18px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow: auto;
+      }
+      .brand {
+        display: flex;
+        gap: 11px;
+        align-items: center;
+        margin: 0 6px 28px;
+      }
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, var(--accent), #ad76ff);
+        font-weight: 900;
+      }
+      .brand h1 {
+        font-size: 15px;
+        margin: 0;
+      }
+      .brand small {
+        color: var(--muted);
+      }
+      .side-title {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        margin: 18px 8px 8px;
+      }
+      .project-link {
+        width: 100%;
+        padding: 10px 12px;
+        margin: 2px 0;
+        text-align: left;
+        color: var(--muted);
+        background: transparent;
+        border-radius: 9px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .project-link:hover,
+      .project-link.active {
+        background: var(--panel2);
+        color: var(--text);
+      }
+      .primary,
+      .secondary,
+      .danger {
+        border-radius: 9px;
+        padding: 10px 14px;
+        font-weight: 750;
+      }
+      .primary {
+        background: var(--accent);
+        color: #071022;
+      }
+      .primary:hover {
+        filter: brightness(1.08);
+      }
+      .secondary {
+        background: #202a3c;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .danger {
+        background: rgba(255, 117, 135, 0.12);
+        color: var(--danger);
+        border: 1px solid rgba(255, 117, 135, 0.25);
+      }
+      .wide {
+        width: 100%;
+      }
+      main {
+        padding: 28px clamp(20px, 4vw, 56px) 80px;
+        min-width: 0;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+      .topbar h2 {
+        margin: 0;
+        font-size: 25px;
+        letter-spacing: -0.03em;
+      }
+      .auth {
+        display: flex;
+        gap: 8px;
+      }
+      input,
+      select,
+      textarea {
+        color: var(--text);
+        background: #0d121c;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 11px;
+        width: 100%;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: 2px solid rgba(124, 156, 255, 0.25);
+        border-color: var(--accent);
+      }
+      .auth input {
+        width: 220px;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+      .grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .card {
+        background: linear-gradient(
+          180deg,
+          rgba(23, 30, 44, 0.94),
+          rgba(18, 23, 34, 0.94)
+        );
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: var(--shadow);
+      }
+      .card h3 {
+        margin: 0 0 14px;
+        font-size: 15px;
+      }
+      .card p {
+        color: var(--muted);
+      }
+      .hero {
+        padding: 34px;
+      }
+      .hero h2 {
+        font-size: clamp(28px, 5vw, 48px);
+        max-width: 750px;
+        margin: 0 0 12px;
+        line-height: 1.05;
+        letter-spacing: -0.045em;
+      }
+      .hero p {
+        max-width: 650px;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        margin: 18px 0;
+      }
+      .stat {
+        background: #0d121c;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        padding: 14px;
+      }
+      .stat b {
+        display: block;
+        font-size: 24px;
+      }
+      .stat span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .field {
+        margin-bottom: 12px;
+      }
+      .field label {
+        display: block;
+        margin-bottom: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        align-items: center;
+      }
+      .actions input,
+      .actions select {
+        width: 110px;
+      }
+      .ideas {
+        max-height: 360px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      .idea {
+        display: grid;
+        grid-template-columns: 22px 1fr auto;
+        gap: 10px;
+        align-items: start;
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .idea:last-child {
+        border: 0;
+      }
+      .idea input {
+        width: auto;
+        margin-top: 3px;
+      }
+      .idea small {
+        color: var(--muted);
+      }
+      .score {
+        color: var(--accent2);
+        font-weight: 800;
+      }
+      .run {
+        border: 1px solid var(--border);
+        padding: 13px;
+        border-radius: 10px;
+        margin: 9px 0;
+      }
+      .run-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 850;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: #263149;
+      }
+      .badge.COMPLETED {
+        color: var(--accent2);
+      }
+      .badge.FAILED {
+        color: var(--danger);
+      }
+      .badge.PARTIAL {
+        color: var(--warn);
+      }
+      .badge.RUNNING {
+        color: var(--accent);
+      }
+      .progress {
+        height: 6px;
+        background: #080b11;
+        border-radius: 99px;
+        overflow: hidden;
+        margin: 9px 0;
+      }
+      .progress i {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), var(--accent2));
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .error {
+        color: var(--danger);
+      }
+      .success {
+        color: var(--accent2);
+      }
+      .hidden {
+        display: none !important;
+      }
+      #notice {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        max-width: 420px;
+        padding: 12px 16px;
+        border-radius: 10px;
+        background: #202a3c;
+        box-shadow: var(--shadow);
+        z-index: 20;
+      }
+      details {
+        margin-top: 14px;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .project-card {
+        background: #0d121c;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        padding: 15px;
+      }
+      .project-card h3 {
+        margin: 0 0 4px;
+      }
+      .project-card .mini {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-size: 12px;
+        margin: 12px 0;
+      }
+      @media (max-width: 900px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: static;
+          height: auto;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .grid.two,
+        .stats {
+          grid-template-columns: 1fr 1fr;
+        }
+        main {
+          padding: 20px;
+        }
+      }
+      @media (max-width: 560px) {
+        .grid.two,
+        .stats {
+          grid-template-columns: 1fr;
+        }
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .auth {
+          width: 100%;
+        }
+        .auth input {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside>
+        <div class="brand" id="brand">
+          <button class="brand-mark">CP</button>
+          <div>
+            <h1>Content Production</h1>
+            <small>Agent control plane</small>
+          </div>
+        </div>
+        <button class="primary wide" id="newProjectBtn">+ New project</button>
+        <div class="side-title">Projects</div>
+        <div id="projectNav">
+          <span class="muted">Connect to load projects</span>
+        </div>
+      </aside>
+      <main>
+        <div class="topbar">
+          <div>
+            <h2 id="pageTitle">Dashboard</h2>
+            <div class="muted" id="pageSubtitle">
+              Manage the content lifecycle from one place.
+            </div>
+          </div>
+          <div class="auth">
+            <input
+              type="password"
+              id="apiToken"
+              placeholder="API bearer token"
+              autocomplete="current-password"
+            /><button class="secondary" id="connectBtn">Connect</button>
+          </div>
+        </div>
+        <section id="welcome" class="card hero">
+          <h2>Ideas to storyboards, under your control.</h2>
+          <p>
+            Create explicit content projects, generate ideas, process scripts
+            sequentially, track every run, retry failures safely, and configure
+            weekly production.
+          </p>
+          <button class="primary" id="welcomeCreate">Create a project</button>
+          <div
+            id="projectOverview"
+            class="grid two"
+            style="margin-top: 28px"
+          ></div>
+        </section>
+        <section id="newProject" class="card hidden">
+          <h3>New content project</h3>
+          <form id="projectForm" class="grid two">
+            <div class="field">
+              <label>Project name</label><input name="name" required />
+            </div>
+            <div class="field">
+              <label>Niche</label><input name="niche" required />
+            </div>
+            <div class="field">
+              <label>Platform</label
+              ><input name="platform" required placeholder="YouTube, TikTok…" />
+            </div>
+            <div class="field">
+              <label>Target audience</label
+              ><input name="targetAudience" required />
+            </div>
+            <div class="field">
+              <label>Content style</label><input name="contentStyle" required />
+            </div>
+            <div class="field">
+              <label>Description</label><input name="description" />
+            </div>
+            <div class="field">
+              <label>Character reference</label
+              ><select name="hasCharacterReference">
+                <option value="N">No</option>
+                <option value="Y">Yes</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Style reference</label
+              ><select name="hasStyleReference">
+                <option value="N">No</option>
+                <option value="Y">Yes</option>
+              </select>
+            </div>
+            <div class="actions">
+              <button class="primary" type="submit">Create project</button
+              ><button class="secondary" type="button" id="cancelProject">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+        <section id="projectDetail" class="hidden">
+          <div class="card">
+            <div class="actions" style="justify-content: space-between">
+              <div>
+                <h3 id="projectName"></h3>
+                <div class="muted" id="projectConfig"></div>
+              </div>
+              <button class="secondary" id="refreshProject">Refresh</button>
+            </div>
+            <div class="stats" id="stats"></div>
+          </div>
+          <div class="grid two" style="margin-top: 16px">
+            <div class="card">
+              <h3>1. Generate ideas</h3>
+              <p>
+                Research this project and save ranked ideas without generating
+                scripts yet.
+              </p>
+              <div class="actions">
+                <input
+                  id="ideaCount"
+                  type="number"
+                  min="1"
+                  max="50"
+                  value="10"
+                /><button class="primary" id="generateIdeas">
+                  Generate ideas
+                </button>
+              </div>
+            </div>
+            <div class="card">
+              <h3>2. Generate scripts</h3>
+              <p>
+                Eligible ideas are processed one at a time through the shared
+                idempotent worker.
+              </p>
+              <div class="actions">
+                <input
+                  id="scriptCount"
+                  type="number"
+                  min="1"
+                  max="50"
+                  value="10"
+                /><button class="primary" id="generateCount">
+                  Generate by count</button
+                ><button class="secondary" id="generateSelected">
+                  Generate selected
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="grid two" style="margin-top: 16px">
+            <div class="card">
+              <div class="actions" style="justify-content: space-between">
+                <h3>Eligible ideas</h3>
+                <button class="secondary" id="reloadIdeas">Reload</button>
+              </div>
+              <div id="ideas" class="ideas">
+                <div class="muted" style="padding: 14px">Loading…</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Weekly schedule</h3>
+              <form id="scheduleForm">
+                <div class="grid two">
+                  <div class="field">
+                    <label>Status</label
+                    ><select name="enabled">
+                      <option value="false">Disabled</option>
+                      <option value="true">Enabled</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Day</label
+                    ><select name="dayOfWeek">
+                      <option value="1">Monday</option>
+                      <option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option>
+                      <option value="4">Thursday</option>
+                      <option value="5">Friday</option>
+                      <option value="6">Saturday</option>
+                      <option value="0">Sunday</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Time</label
+                    ><input name="time" type="time" value="09:00" />
+                  </div>
+                  <div class="field">
+                    <label>Scripts per run</label
+                    ><input
+                      name="scriptCount"
+                      type="number"
+                      min="1"
+                      max="50"
+                      value="10"
+                    />
+                  </div>
+                </div>
+                <button class="primary" type="submit">Save schedule</button>
+              </form>
+            </div>
+          </div>
+          <div class="card" style="margin-top: 16px">
+            <div class="actions" style="justify-content: space-between">
+              <h3>Recent activity</h3>
+              <button class="secondary" id="reloadRuns">Refresh</button>
+            </div>
+            <div id="runs"><span class="muted">No runs loaded.</span></div>
+          </div>
+          <details class="card">
+            <summary>Legacy full pipeline</summary>
+            <p>
+              Compatibility action: research, ideas, and scripts through the
+              original <code>/niche</code> flow. This uses implicit project
+              matching and is not the primary dashboard workflow.
+            </p>
+            <button class="secondary" id="legacyRun">
+              Run legacy full pipeline
+            </button>
+          </details>
+        </section>
+      </main>
+    </div>
+    <div id="notice" class="hidden"></div>
+    <script>
+      (() => {
+        const $ = (id) => document.getElementById(id);
+        const esc = (value) =>
+          String(value ?? "").replace(
+            /[&<>'"]/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                "'": "&#39;",
+                '"': "&quot;",
+              })[c],
+          );
+        let token = sessionStorage.getItem("apiToken") || "",
+          projects = [],
+          current = null,
+          projectRequestId = sessionStorage.getItem("projectRequestId") || crypto.randomUUID(),
+          polling = false,
+          pollErrorShown = false;
+        sessionStorage.setItem("projectRequestId", projectRequestId);
+        $("apiToken").value = token;
+        function notice(message, type = "") {
+          const box = $("notice");
+          box.textContent = message;
+          box.className = type;
+          setTimeout(() => (box.className = "hidden"), 4200);
+        }
+        async function api(path, options = {}) {
+          if (!token) throw new Error("Enter the API token and connect first.");
+          const response = await fetch(path, {
+            ...options,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+              ...(options.headers || {}),
+            },
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok)
+            throw new Error(
+              data.error || `Request failed (${response.status})`,
+            );
+          return data;
+        }
+        function show(name) {
+          for (const id of ["welcome", "newProject", "projectDetail"])
+            $(id).classList.toggle("hidden", id !== name);
+        }
+        function renderNav() {
+          $("projectNav").innerHTML = projects.length
+            ? projects
+                .map(
+                  (p) =>
+                    `<button class="project-link ${current?.id === p.id ? "active" : ""}" data-id="${esc(p.id)}">${esc(p.fields.channel_page_name || p.fields.niche || "Untitled project")}</button>`,
+                )
+                .join("")
+            : '<span class="muted">No projects yet</span>';
+          document
+            .querySelectorAll(".project-link")
+            .forEach(
+              (button) =>
+                (button.onclick = () => openProject(button.dataset.id)),
+            );
+          renderOverview();
+        }
+        function renderOverview() {
+          $("projectOverview").innerHTML = projects
+            .map((p) => {
+              const s = p.stats || {};
+              return `<div class="project-card"><h3>${esc(p.fields.channel_page_name || p.fields.niche || "Untitled project")}</h3><div class="muted">${esc([p.fields.niche, p.fields.platform].filter(Boolean).join(" · "))}</div><div class="mini"><span>${Number(s.ideas || 0)} ideas</span><span>${Number(s.scripts || 0)} scripts</span><span>${Number(s.approvedScripts || 0)} approved</span><span>${Number(s.storyboards || 0)} storyboards</span></div><button class="secondary overview-open" data-id="${esc(p.id)}">Open project</button></div>`;
+            })
+            .join("");
+          document
+            .querySelectorAll(".overview-open")
+            .forEach(
+              (button) =>
+                (button.onclick = () => openProject(button.dataset.id)),
+            );
+        }
+        async function loadProjects() {
+          const data = await api("/api/projects?limit=50");
+          console.log("Loaded projects:", data.projects);
+          projects = data.projects;
+          renderNav();
+          if (current)
+            current = projects.find((p) => p.id === current.id) || current;
+        }
+        async function connect() {
+          token = $("apiToken").value.trim();
+          sessionStorage.setItem("apiToken", token);
+          try {
+            await loadProjects();
+            notice("Connected", "success");
+            if (!current) show("welcome");
+          } catch (err) {
+            notice(err.message, "error");
+          }
+        }
+        const stat = (label, value) =>
+          `<div class="stat"><b>${Number(value || 0)}</b><span>${esc(label)}</span></div>`;
+        async function openProject(id) {
+          try {
+            const data = await api(`/api/projects/${encodeURIComponent(id)}`);
+            current = data.project;
+            renderNav();
+            show("projectDetail");
+            $("pageTitle").textContent =
+              current.fields.channel_page_name ||
+              current.fields.niche ||
+              "Project";
+            $("pageSubtitle").textContent = "Project control center";
+            $("projectName").textContent =
+              current.fields.channel_page_name || "Untitled project";
+            $("projectConfig").textContent = [
+              current.fields.niche,
+              current.fields.platform,
+              current.fields.target_audience,
+              current.fields.content_style,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            const s = current.stats || {};
+            $("stats").innerHTML =
+              stat("Ideas", s.ideas) +
+              stat("Scripts", s.scripts) +
+              stat("Approved", s.approvedScripts) +
+              stat("Storyboards", s.storyboards) +
+              stat("Draft / recovery", s.failedRecoveryItems);
+            await Promise.all([loadIdeas(), loadRuns(), loadSchedule()]);
+          } catch (err) {
+            notice(err.message, "error");
+          }
+        }
+        async function loadIdeas() {
+          if (!current) return;
+          const { ideas } = await api(
+            `/api/projects/${encodeURIComponent(current.id)}/ideas?limit=50`,
+          );
+          $("ideas").innerHTML = ideas.length
+            ? ideas
+                .map(
+                  (idea) =>
+                    `<label class="idea"><input type="checkbox" value="${esc(idea.id)}"/><span><b>${esc(idea.fields.title || "Untitled idea")}</b><br/><small>${esc(idea.fields.topic || idea.fields.emotional_angle || "")}</small></span><span class="score">${esc(idea.fields.content_score || "")}</span></label>`,
+                )
+                .join("")
+            : '<div class="muted" style="padding:14px">No eligible Draft ideas. Generate ideas or refresh the project.</div>';
+        }
+        function renderRuns(runs) {
+          $("runs").innerHTML = runs.length
+            ? runs
+                .map((run) => {
+                  const percent = Math.min(
+                    100,
+                    Math.round(
+                      (run.processedCount / Math.max(1, run.requestedCount)) *
+                        100,
+                    ),
+                  );
+                  const failedItems = (run.items || []).filter(
+                    (i) => i.status === "FAILED",
+                  );
+                  const retry = failedItems.length
+                    ? `<button class="danger retry" data-id="${esc(run.id)}">Retry failures</button>`
+                    : "";
+                  const failures = failedItems.length
+                    ? `<ul class="error">${failedItems.map((i) => `<li>${esc(i.ideaId || "Unknown item")}: ${esc(i.error || "Generation failed")}</li>`).join("")}</ul>`
+                    : "";
+                  return `<div class="run"><div class="run-head"><b>${esc(run.type || "SCRIPTS")} · ${esc(run.source)}</b><span class="badge ${esc(run.status)}">${esc(run.status)}</span></div><div class="progress"><i style="width:${percent}%"></i></div><div class="muted">${run.processedCount}/${run.requestedCount} processed · ${run.successfulCount} successful · ${run.failedCount} failed</div>${run.error ? `<div class="error">${esc(run.error)}</div>` : ""}${failures}<div class="actions" style="margin-top:8px">${retry}</div></div>`;
+                })
+                .join("")
+            : '<span class="muted">No activity for this project.</span>';
+          document
+            .querySelectorAll(".retry")
+            .forEach((b) => (b.onclick = () => retryRun(b.dataset.id)));
+        }
+        async function loadRuns() {
+          if (!current) return [];
+          const { runs } = await api(
+            `/api/script-runs?projectId=${encodeURIComponent(current.id)}&limit=20`,
+          );
+          renderRuns(runs);
+          return runs;
+        }
+        async function loadSchedule() {
+          if (!current) return;
+          const { schedule } = await api(
+            `/api/projects/${encodeURIComponent(current.id)}/schedule`,
+          );
+          if (!schedule) return;
+          const form = $("scheduleForm");
+          form.enabled.value = String(schedule.enabled);
+          form.dayOfWeek.value = String(schedule.dayOfWeek);
+          form.time.value = schedule.time;
+          form.scriptCount.value = schedule.scriptCount;
+        }
+        async function createRun(body) {
+          const { run } = await api("/api/script-runs", {
+            method: "POST",
+            body: JSON.stringify(body),
+          });
+          notice(`Run ${run.id.slice(0, 8)} queued`, "success");
+          await loadRuns();
+        }
+        async function retryRun(id) {
+          try {
+            const { run } = await api(
+              `/api/script-runs/${encodeURIComponent(id)}/retry`,
+              { method: "POST" },
+            );
+            notice(`Retry ${run.id.slice(0, 8)} queued`, "success");
+            await loadRuns();
+          } catch (err) {
+            notice(err.message, "error");
+          }
+        }
+        $("connectBtn").onclick = connect;
+        $("newProjectBtn").onclick = $("welcomeCreate").onclick = () => {
+          show("newProject");
+          $("pageTitle").textContent = "New project";
+        };
+        $("cancelProject").onclick = () =>
+          current ? show("projectDetail") : show("welcome");
+        $("brand").onclick = show("welcome");
+        $("projectForm").onsubmit = async (event) => {
+          event.preventDefault();
+          const f = new FormData(event.target),
+            body = Object.fromEntries(f);
+          body.requestId = projectRequestId;
+          try {
+            const { project } = await api("/api/projects", {
+              method: "POST",
+              body: JSON.stringify(body),
+            });
+            projectRequestId = crypto.randomUUID();
+            sessionStorage.setItem("projectRequestId", projectRequestId);
+            event.target.reset();
+            await loadProjects();
+            await openProject(project.id);
+            notice("Project created", "success");
+          } catch (err) {
+            notice(err.message, "error");
+          }
+        };
+        $("refreshProject").onclick = async () => {
+          await loadProjects();
+          await openProject(current.id);
+        };
+        $("reloadIdeas").onclick = () =>
+          loadIdeas().catch((e) => notice(e.message, "error"));
+        $("reloadRuns").onclick = () =>
+          loadRuns().catch((e) => notice(e.message, "error"));
+        $("generateIdeas").onclick = async () => {
+          try {
+            const count = Number($("ideaCount").value),
+              { run } = await api(
+                `/api/projects/${encodeURIComponent(current.id)}/idea-runs`,
+                { method: "POST", body: JSON.stringify({ count }) },
+              );
+            notice(`Idea run ${run.id.slice(0, 8)} queued`, "success");
+            await loadRuns();
+          } catch (err) {
+            notice(err.message, "error");
+          }
+        };
+        $("generateCount").onclick = () =>
+          createRun({
+            projectId: current.id,
+            mode: "count",
+            count: Number($("scriptCount").value),
+          }).catch((e) => notice(e.message, "error"));
+        $("generateSelected").onclick = () => {
+          const ideaIds = [
+            ...document.querySelectorAll("#ideas input:checked"),
+          ].map((i) => i.value);
+          if (!ideaIds.length)
+            return notice("Select at least one idea", "error");
+          createRun({ projectId: current.id, mode: "selected", ideaIds }).catch(
+            (e) => notice(e.message, "error"),
+          );
+        };
+        $("scheduleForm").onsubmit = async (event) => {
+          event.preventDefault();
+          const f = new FormData(event.target),
+            body = {
+              enabled: f.get("enabled") === "true",
+              dayOfWeek: Number(f.get("dayOfWeek")),
+              time: f.get("time"),
+              scriptCount: Number(f.get("scriptCount")),
+            };
+          try {
+            await api(
+              `/api/projects/${encodeURIComponent(current.id)}/schedule`,
+              { method: "PUT", body: JSON.stringify(body) },
+            );
+            notice("Schedule saved", "success");
+          } catch (err) {
+            notice(err.message, "error");
+          }
+        };
+        $("legacyRun").onclick = async () => {
+          const p = current.fields,
+            body = {
+              NICHE: p.niche || "",
+              PLATFORM: p.platform || "",
+              "TARGET AUDIENCE": p.target_audience || "",
+              "CONTENT STYLE": p.content_style || "",
+              "CHANNEL NAME (Optional)": p.channel_page_name || "",
+              "CHANNEL DESCRIPTION (Optional)": p.description || "",
+              "Has Character Reference Sheet": p.has_character_reference || "N",
+              "Has Style Reference": p.has_style_reference || "N",
+            };
+          try {
+            await api("/niche", { method: "POST", body: JSON.stringify(body) });
+            notice("Legacy pipeline queued", "success");
+          } catch (err) {
+            notice(err.message, "error");
+          }
+        };
+        setInterval(async () => {
+          if (!current || !token || polling) return;
+          polling = true;
+          try {
+            await loadRuns();
+            pollErrorShown = false;
+          } catch (err) {
+            if (!pollErrorShown)
+              notice(`Activity refresh failed: ${err.message}`, "error");
+            pollErrorShown = true;
+          } finally {
+            polling = false;
+          }
+        }, 3000);
+        if (token) connect();
+      })();
+    </script>
+  </body>
+</html>

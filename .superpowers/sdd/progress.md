@@ -1,0 +1,47 @@
+Task 1: complete (config.js + .env.example, review clean)
+Task 2: complete (src/clients/ytdlp.js + tests/ytdlp.test.js, 4/4 tests, review clean)
+  Minor (for final review triage):
+  - ytdlp.js: non-object JSON line (e.g. `123`) yields phantom all-null row; guard with typeof check
+  - ytdlp.js: NaN YTDLP_TIMEOUT_MS silently disables execFile timeout; Number.isFinite fallback
+  - searchYouTube argv construction untested (pure-logic constraint); buildArgs helper would enable it
+Task 3: complete (src/agents/trendScout/ x3 files + tests/trendScout.test.js, 4/4 tests, review approved)
+  Important finding (owner decided: keep plan as-is): no overall scout time budget; worst case ~5min sequential stall — ACCEPTED by owner
+  Minor (for final review triage):
+  - index.js: returned queries may overstate executed searches when 50-cap breaks loop early
+  - index.js: per-query log reports pre-truncation count on the capped query
+  - test gap: whitespace-only query strings not in fixture
+  - no npm test script yet (Task 6 adds it)
+Task 4: complete (research prompt.js/index.js threading + tests/researchPrompt.test.js, 10/10 suite, review approved)
+  Minor (for final review triage):
+  - researchPrompt.test.js backward-compat test is self-referential (compares post-change output to itself); golden-snapshot literal would pin true pre-change identity (plan-mandated text; byte-identity independently verified vs plan doc)
+  - prompt.js:56 empty-string channel renders dangling separator ("- \"T\" — , 99 views"); filter should also drop ''
+  - prompt.js:54 untrusted video titles interpolated without newline stripping (prompt-injection surface, bounded blast radius); suggest replace(/\s+/g,' ')
+  - Untitled fallback + empty-meta branches untested (one sparse fixture row would close)
+  - test assert.ok(!p.includes('null')) brittle vs legit titles containing "null" (plan-mandated text)
+  - VideoRow.url is dead data across ytdlp→scout→prompt chain (intentional per brief; final review may use or drop)
+Task 5: complete (pipeline.js scout wiring, 10/10 suite, review approved)
+  Minor (for final review triage):
+  - pipeline.js:9-11 header comment sketch omits the scout stage (Task 6 doc pass is the natural fix)
+Task 6: complete (package.json test script + CLAUDE.md docs + pipeline.js sketch comment, npm test 10/10, review approved)
+  Justified deviation: brief's `node --test tests/` provably fails on Node v24 (dir arg = module path); shipped `node --test "tests/**/*.test.js"` with don't-fix-this note in CLAUDE.md — reviewer reproduced both halves
+  Reviewer ⚠️ resolved by controller: diff vs post-Task-5 snapshot confirms pipeline.js edit was comment-only (line 9)
+  Minor (for final review triage):
+  - CLAUDE.md:40-47 top-level pipeline sketch still omits Trend Scout stage (most-read pipeline description now stale)
+  - CLAUDE.md:58 Commands bullet is long; could tighten (cosmetic, low value)
+  - grep plan/briefs for stale `node --test tests/` references so the broken command isn't reintroduced
+Task 7: complete (manual verification, all 5 steps pass)
+  - yt-dlp 2026.07.04 present; client smoke test returns real rows; ENOENT degradation confirmed
+  - Full run: scout planned 5 queries, executed 4 (50-video cap), MEM after:trendScout/after:research in order, 10/10 scripts saved, peak RSS 66MB
+  - Disabled run: "Trend Scout disabled" logged, pre-change behavior; concept 1 lost to external Gemini 503 on primary+fallback (per-concept containment worked, 9/10 saved)
+  - Note: one Telegram 504 (external, transient) on the enabled run's final alert
+Final review: complete (opus whole-branch review + fix pass + re-review, verdict: Ready to merge — Yes)
+  Fix-before-merge items applied and re-verified: config.js Number(env)||default numerics; README (scout diagram, yt-dlp prerequisite, npm test, layout); CLAUDE.md top sketch; prompt.js .filter(Boolean); untrusted-data preamble sentence; .env.example Storyboard sic + cooldown 300000
+  Correction: verification record said "13 tests"; actual suite is 10 (4 ytdlp + 4 trendScout + 2 researchPrompt)
+  Backlog (all polish, safe to carry):
+  - per-query grouping in the research data section (restores spec's attribution; subsumes queries-overstate-executed)
+  - buildArgs extraction + argv tests for ytdlp client
+  - toRow typeof guard vs bare-scalar JSON lines
+  - stderr logged at warn even on success (consider info, or warn only with err)
+  - negative YTDLP_TIMEOUT_MS still disables the kill timeout (Number.isFinite && > 0 guard)
+  - test-fixture gaps: whitespace-only query, Untitled/empty-meta branches, scope the !includes('null') assertion
+  - key-pool note: scout adds a 13th Gemini call per run (~5 min extra wall-clock on single-key deploys) — worth a sentence in env docs

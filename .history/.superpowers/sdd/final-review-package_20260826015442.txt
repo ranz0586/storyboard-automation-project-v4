@@ -1,0 +1,650 @@
+=== src/config.js ===
+import 'dotenv/config';
+
+function required(name) {
+  const v = process.env[name];
+  if (!v) {
+    // Do not throw at import time for every var — some flows only need a subset.
+    // Callers that truly require a value should read config and validate.
+    return '';
+  }
+  return v;
+}
+
+// GEMINI_API_KEYS is comma-separated; the legacy single GEMINI_API_KEY is
+// merged in so existing .env files keep working. Order/duplicates don't matter
+// (the pool dedupes and rotates by idle time).
+function geminiApiKeys() {
+  const keys = [
+    ...(process.env.GEMINI_API_KEYS || '').split(','),
+    process.env.GEMINI_API_KEY || '',
+  ]
+    .map((k) => k.trim())
+    .filter(Boolean);
+  return [...new Set(keys)];
+}
+
+export const config = {
+  gemini: {
+    apiKeys: geminiApiKeys(),
+    // Per-key cooldown between uses (default 5 min). Set 0 to disable.
+    keyCooldownMs: process.env.GEMINI_KEY_COOLDOWN_MS !== undefined
+      ? Number(process.env.GEMINI_KEY_COOLDOWN_MS)
+      : 5 * 60_000,
+    modelPrimary: process.env.GEMINI_MODEL_PRIMARY || 'gemini-3.5-flash',
+    modelFallback: process.env.GEMINI_MODEL_FALLBACK || 'gemini-3.1-flash-lite',
+  },
+  // yt-dlp Trend Scout (Node-only addition; not part of the n8n workflow).
+  ytdlp: {
+    path: process.env.YTDLP_PATH || 'yt-dlp',
+    searchLimit: Number(process.env.YTDLP_SEARCH_LIMIT || 15),
+    timeoutMs: Number(process.env.YTDLP_TIMEOUT_MS || 60_000),
+    // Default on; set TREND_SCOUT_ENABLED=false to skip the scout entirely.
+    enabled: process.env.TREND_SCOUT_ENABLED !== 'false',
+  },
+  airtable: {
+    apiKey: required('AIRTABLE_API_KEY'),
+    // typecast lets Airtable coerce near-miss values (numeric strings into
+    // number columns, new singleSelect options) instead of rejecting the
+    // whole record. Set AIRTABLE_TYPECAST=false to disable.
+    typecast: process.env.AIRTABLE_TYPECAST !== 'false',
+    baseId: process.env.AIRTABLE_BASE_ID || 'appnBhwjEiHrAZpaa',
+    tables: {
+      projects: process.env.AIRTABLE_TABLE_PROJECTS || 'Projects',
+      ideas: process.env.AIRTABLE_TABLE_IDEAS || 'Ideas',
+      scripts: process.env.AIRTABLE_TABLE_SCRIPTS || 'Scripts',
+      storyboards: process.env.AIRTABLE_TABLE_STORYBOARDS || 'Storyboard',
+    },
+  },
+  telegram: {
+    botToken: required('TELEGRAM_BOT_TOKEN'),
+    chatId: process.env.TELEGRAM_CHAT_ID || '6626378722',
+  },
+  server: {
+    port: Number(process.env.PORT || 3000),
+  },
+  pipeline: {
+    conceptCount: Number(process.env.IDEA_CONCEPT_COUNT || 10),
+    // In-process storyboard poll interval (replaces the n8n Schedule Trigger,
+    // 15 min there). 0/unset = off; use `npm run storyboard` + cron instead.
+    storyboardPollMs: Number(process.env.STORYBOARD_POLL_MS || 0),
+  },
+};
+
+=== .env.example ===
+# ---- Google Gemini (googlePalmApi in n8n) ----
+# Comma-separated list; each key is used at most once per cooldown window,
+# so more keys = more calls per window. Legacy single GEMINI_API_KEY still works.
+GEMINI_API_KEYS=
+# Per-key cooldown in ms (default 60000 = 1 min; 0 disables rotation waits).
+GEMINI_KEY_COOLDOWN_MS=60000
+
+# Primary + fallback models, mirroring the workflow's Gemini nodes.
+GEMINI_MODEL_PRIMARY=gemini-3.5-flash
+GEMINI_MODEL_FALLBACK=gemini-3.1-flash-lite
+
+# ---- Airtable ----
+# A personal access token (pat...), NOT a legacy key... API key (retired Feb 2024).
+# Needs data.records:read + data.records:write scopes and the base added as a resource.
+AIRTABLE_API_KEY=
+AIRTABLE_BASE_ID=appnBhwjEiHrAZpaa
+AIRTABLE_TABLE_PROJECTS=Projects
+AIRTABLE_TABLE_IDEAS=Ideas
+AIRTABLE_TABLE_SCRIPTS=Scripts
+AIRTABLE_TABLE_STORYBOARDS=Storyboard
+
+# Server-side coercion of near-miss values on writes (numeric strings, new
+# select options). Default on; set false to get strict type errors instead.
+AIRTABLE_TYPECAST=true
+
+# ---- Telegram ----
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=6626378722
+
+# ---- Server ----
+PORT=3000
+
+# Number of concepts the Idea Agent should produce (workflow uses 10).
+IDEA_CONCEPT_COUNT=10
+
+# In-process storyboard poll interval in ms for the server (0/unset = off).
+# Alternative: cron `npm run storyboard`. The n8n Schedule Trigger used 15 min.
+STORYBOARD_POLL_MS=0
+
+# ---- yt-dlp Trend Scout (optional; degrades gracefully if missing) ----
+# Path to the yt-dlp binary (must be installed separately: pip install yt-dlp).
+YTDLP_PATH=yt-dlp
+# Search results per planned query (max 5 queries, 50 videos total).
+YTDLP_SEARCH_LIMIT=15
+# Per-query hard timeout in ms.
+YTDLP_TIMEOUT_MS=60000
+# Set false to skip the Trend Scout stage entirely.
+TREND_SCOUT_ENABLED=true
+
+=== src/clients/ytdlp.js ===
+import { execFile } from 'node:child_process';
+import { config } from '../config.js';
+import { logger } from '../utils/logger.js';
+
+// Thin wrapper around the yt-dlp binary for YouTube SEARCH METADATA only.
+// Node-only addition (no n8n counterpart). Flat extraction: no video pages,
+// no downloads, no format resolution — a search returns a few KB of JSON.
+//
+// The query is passed as an argv element via execFile (no shell), so
+// arbitrary user niches can't inject commands.
+
+// Map one flat-playlist entry to a compact row. Missing fields stay null —
+// flat extraction often omits stats; do not fabricate values.
+function toRow(entry) {
+  return {
+    title: entry.title ?? null,
+    channel: entry.channel ?? entry.uploader ?? null,
+    view_count: entry.view_count ?? null,
+    upload_date: entry.upload_date ?? null,
+    duration: entry.duration ?? null,
+    url: entry.url ?? entry.webpage_url ?? null,
+  };
+}
+
+// yt-dlp --dump-json emits one JSON object per line (NDJSON). Tolerate
+// blank/garbage lines — a partial parse is still useful research context.
+export function parseNdjsonVideos(stdout) {
+  const rows = [];
+  for (const line of String(stdout).split('\n')) {
+    const s = line.trim();
+    if (!s) continue;
+    try {
+      rows.push(toRow(JSON.parse(s)));
+    } catch {
+      // skip malformed line
+    }
+  }
+  return rows;
+}
+
+// Run one YouTube search. Resolves to compact rows; REJECTS on spawn
+// failure/timeout/non-zero exit — the Trend Scout agent handles degradation.
+export function searchYouTube(query, { limit, timeoutMs } = {}) {
+  const n = limit ?? config.ytdlp.searchLimit;
+  const t = timeoutMs ?? config.ytdlp.timeoutMs;
+  const args = [`ytsearch${n}:${query}`, '--dump-json', '--flat-playlist', '--no-warnings'];
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      config.ytdlp.path,
+      args,
+      { timeout: t, killSignal: 'SIGKILL', maxBuffer: 10 * 1024 * 1024, windowsHide: true },
+      (err, stdout, stderr) => {
+        if (stderr) logger.warn(`yt-dlp stderr (query "${query}")`, String(stderr).slice(0, 500));
+        if (err) return reject(err);
+        resolve(parseNdjsonVideos(stdout));
+      }
+    );
+  });
+}
+
+=== src/agents/trendScout/system.js ===
+// Trend Scout system prompt — NODE-ONLY ADDITION. This agent does NOT exist
+// in n8n workflow Zl1MpttLGWdWFqRU, so the "verbatim from n8n" rule does not
+// apply here. It plans YouTube search queries that the yt-dlp client executes.
+export const TREND_SCOUT_SYSTEM = `You are a YouTube search strategist for short-form content research.
+
+Your ONLY job: given a content niche, platform, audience, and style, produce the 3-5 YouTube search queries most likely to surface CURRENTLY trending short-form videos in that niche.
+
+Rules:
+- Queries must be phrases a real viewer would type into YouTube search.
+- Cover different angles: the core niche, an emotional/curiosity angle, a format angle (e.g. "shorts"), and an adjacent-topic angle.
+- Keep each query under 8 words.
+- Do NOT include hashtags, quotes, or boolean operators.
+
+Return ONLY a valid JSON array of query strings, e.g.:
+["query one", "query two", "query three"]
+
+No markdown. No explanations. No object wrapper.`;
+
+=== src/agents/trendScout/prompt.js ===
+// User prompt builder for the Trend Scout query planner (Node-only addition).
+export function buildTrendScoutPrompt(form) {
+  return `Plan YouTube search queries for trend research on:
+
+NICHE:
+${form.NICHE || ''}
+
+PLATFORM:
+${form.PLATFORM || ''}
+
+TARGET AUDIENCE:
+${form['TARGET AUDIENCE'] || ''}
+
+CONTENT STYLE:
+${form['CONTENT STYLE'] || ''}
+
+CHANNEL DESCRIPTION:
+${form['CHANNEL DESCRIPTION (Optional)'] || ''}
+
+Return ONLY the JSON array of 3-5 search query strings.`;
+}
+
+=== src/agents/trendScout/index.js ===
+import { TREND_SCOUT_SYSTEM } from './system.js';
+import { buildTrendScoutPrompt } from './prompt.js';
+import { searchYouTube } from '../../clients/ytdlp.js';
+import { config } from '../../config.js';
+import { logger } from '../../utils/logger.js';
+
+const MAX_QUERIES = 5;
+const MAX_TOTAL_VIDEOS = 50;
+
+// Validate/cap the planner's output. Exported for tests.
+// LLMs sometimes wrap the array ({ "queries": [...] }) — unwrap that shape.
+export function normalizeQueries(raw) {
+  const arr = Array.isArray(raw) ? raw : Array.isArray(raw?.queries) ? raw.queries : [];
+  return arr
+    .filter((q) => typeof q === 'string' && q.trim())
+    .map((q) => q.trim())
+    .slice(0, MAX_QUERIES);
+}
+
+// Trend Scout: plan queries with Gemini, execute them with yt-dlp, return
+// compact video metadata for the Research Agent's prompt.
+// EVERY failure path returns null — the pipeline must degrade gracefully
+// (research runs without real data), never abort because of scraping.
+export async function trendScoutAgent(gemini, form) {
+  if (!config.ytdlp.enabled) {
+    logger.info('Trend Scout disabled (TREND_SCOUT_ENABLED=false)');
+    return null;
+  }
+
+  let queries;
+  try {
+    const raw = await gemini.generate({
+      system: TREND_SCOUT_SYSTEM,
+      prompt: buildTrendScoutPrompt(form),
+      json: true,
+    });
+    queries = normalizeQueries(raw);
+  } catch (err) {
+    logger.warn('Trend Scout query planning failed — continuing without YouTube data', err?.message);
+    return null;
+  }
+  if (!queries.length) {
+    logger.warn('Trend Scout planner returned no usable queries — continuing without YouTube data');
+    return null;
+  }
+  logger.info(`Trend Scout queries: ${queries.join(' | ')}`);
+
+  // One query failing must not abort the scout — collect what we can.
+  const videos = [];
+  for (const query of queries) {
+    if (videos.length >= MAX_TOTAL_VIDEOS) break;
+    try {
+      const rows = await searchYouTube(query);
+      videos.push(...rows.slice(0, MAX_TOTAL_VIDEOS - videos.length));
+      logger.info(`Trend Scout "${query}": ${rows.length} videos`);
+    } catch (err) {
+      logger.warn(`Trend Scout yt-dlp failed for "${query}"`, err?.message);
+    }
+  }
+
+  if (!videos.length) {
+    logger.warn('Trend Scout found no videos — continuing without YouTube data');
+    return null;
+  }
+  return { queries, videos };
+}
+
+=== src/agents/research/prompt.js ===
+// User prompt template — equivalent of the n8n Research Agent node's "text" (prompt) field.
+// The optional youtubeData section is a Node-only addition (Trend Scout);
+// when youtubeData is absent the output is byte-identical to the n8n port.
+export function buildResearchPrompt(form, youtubeData) {
+  const base = `Research trending short-form content opportunities for the following:
+
+NICHE:
+${form.NICHE || ''}
+
+PLATFORM:
+${form.PLATFORM || ''}
+
+TARGET AUDIENCE:
+${form['TARGET AUDIENCE'] || ''}
+
+CONTENT STYLE:
+${form['CONTENT STYLE'] || ''}
+
+CHANNEL DESCRIPTION:
+${form['CHANNEL DESCRIPTION (Optional)'] || ''}
+
+GOAL:
+Identify:
+- trending topics
+- emotional drivers
+- viral storytelling patterns
+- audience psychology
+- oversaturated formats
+- underserved content opportunities
+- high-retention hook styles
+- visual trends
+- replay-driving mechanics
+
+Focus on:
+- emotionally believable trends
+- platform-native behavior
+- psychologically engaging content
+- scalable content opportunities
+
+Avoid:
+- generic ideas
+- stale trends
+- obvious content suggestions
+- repetitive viral formats
+
+Generate a structured research intelligence report optimized for downstream AI content agents.`;
+
+  if (!youtubeData?.videos?.length) return base;
+  return base + formatYoutubeData(youtubeData);
+}
+
+// Compact one video row: null fields are omitted entirely (never print "null").
+function formatVideoLine(v) {
+  const parts = [`"${v.title ?? 'Untitled'}"`];
+  const meta = [
+    v.channel,
+    v.view_count != null ? `${v.view_count} views` : null,
+    v.upload_date ? `uploaded ${v.upload_date}` : null,
+    v.duration != null ? `${v.duration}s` : null,
+  ].filter((x) => x != null);
+  if (meta.length) parts.push(meta.join(', '));
+  return `- ${parts.join(' — ')}`;
+}
+
+function formatYoutubeData({ queries = [], videos = [] }) {
+  return `
+
+REAL YOUTUBE DATA (via yt-dlp):
+The following are actual current YouTube search results for this niche (queries: ${queries.join('; ')}).
+Ground your trend analysis in this real data where relevant — treat titles, view counts, and upload dates as evidence of what is currently working.
+
+${videos.map(formatVideoLine).join('\n')}`;
+}
+
+=== src/agents/research/index.js ===
+import { RESEARCH_SYSTEM } from './system.js';
+import { buildResearchPrompt } from './prompt.js';
+
+// Replicates the "Research Agent" node. youtubeData (optional) comes from the
+// Trend Scout (Node-only addition) — null means "no real data, run as n8n did".
+export async function researchAgent(gemini, form, youtubeData = null) {
+  // Returns the raw research report object; downstream only needs it as context.
+  return gemini.generate({
+    system: RESEARCH_SYSTEM,
+    prompt: buildResearchPrompt(form, youtubeData),
+    json: true,
+  });
+}
+
+=== src/pipeline.js ===
+import { logger } from './utils/logger.js';
+import { flattenConcept, flattenScript } from './transforms.js';
+import { researchAgent } from './agents/research/index.js';
+import { trendScoutAgent } from './agents/trendScout/index.js';
+import { ideaAgent } from './agents/idea/index.js';
+import { scriptAgent } from './agents/script/index.js';
+
+// Orchestrates the NicheForm branch of workflow Zl1MpttLGWdWFqRU:
+//   Save Project -> Trend Scout (yt-dlp, optional) -> Research -> Idea
+//     -> (per concept) Save Idea -> Script -> Save Script
+//   -> Telegram alert
+//
+// Memory-conscious: scripts are generated and persisted ONE concept at a time,
+// so peak memory holds a single script rather than all N. This is the main
+// divergence from the n8n version that OOM'd at ~500MB.
+export async function runContentPipeline({ form, clients }) {
+  const { gemini, airtable, telegram } = clients;
+  const conceptCount = clients.conceptCount ?? 10;
+
+  logger.mem('pipeline:start');
+
+  // 1. Save to Project — upsert keyed on project_id so a rerun reuses the
+  //    existing project instead of creating one per run. project_id is
+  //    niche + "_" + platform with spaces stripped from the platform,
+  //    e.g. "What If_Facebook".
+  const project = await airtable.upsertProject({
+    project_id: `${form.NICHE || ''}_${(form.PLATFORM || '').replace(/\s+/g, '')}`,
+    niche: form.NICHE || '',
+    platform: form.PLATFORM || '',
+    target_audience: form['TARGET AUDIENCE'] || '',
+    content_style: form['CONTENT STYLE'] || '',
+    channel_page_name: form['CHANNEL NAME (Optional)'] || '',
+    description: form['CHANNEL DESCRIPTION (Optional)'] || '',
+    has_character_reference: form['Has Character Reference Sheet'] || 'N',
+    has_style_reference: form['Has Style Reference'] || 'N',
+  });
+  logger.info(project.updated ? 'Project reused (updated)' : 'Project created', project.id);
+
+  // 2a. Trend Scout (Node-only addition): plan YouTube queries, run yt-dlp
+  //     for real search metadata. Null on any failure — research then runs
+  //     exactly as the n8n original did.
+  let youtubeData = await trendScoutAgent(gemini, form);
+  logger.mem('after:trendScout');
+
+  // 2b. Research Agent (grounded in real YouTube data when available)
+  let research = await researchAgent(gemini, form, youtubeData);
+  // Release the scouted metadata once research has consumed it.
+  youtubeData = null;
+  logger.mem('after:research');
+
+  // 3. Idea Agent -> N concepts
+  const concepts = await ideaAgent(gemini, { research, count: conceptCount });
+  logger.info(`Idea Agent produced ${concepts.length} concepts`);
+  // Release the (large) research report once concepts exist.
+  research = null;
+  logger.mem('after:idea');
+
+  const savedScripts = [];
+
+  // 4. Per-concept loop: save idea, generate script, save script.
+  for (let i = 0; i < concepts.length; i++) {
+    const concept = concepts[i];
+
+    try {
+      const idea = await airtable.upsertIdea({
+        ...flattenConcept(concept, { form, projectId: project.id }),
+        // Explicit lifecycle start; flipped to "Script Generated" below (and
+        // the recovery flow picks up Draft/blank rows if that never happens).
+        'Idea Status': 'Draft',
+      });
+
+      const script = await scriptAgent(gemini, { concept, form });
+      const saved = await airtable.createScript(
+        flattenScript(script, { form, projectId: project.id })
+      );
+      savedScripts.push(saved);
+
+      // Mark the idea done only after its script actually persisted.
+      await airtable.updateIdea(idea.id, { 'Idea Status': 'Script Generated' });
+
+      logger.info(`Script ${i + 1}/${concepts.length} saved`, saved.id);
+    } catch (err) {
+      logger.error(`Concept ${i + 1} failed`, err?.message);
+      await telegram.errorAlert({
+        workflowName: 'Video Script Generation (Node)',
+        nodeName: `Script loop #${i + 1}`,
+        message: err?.message || String(err),
+      });
+      // Continue with remaining concepts (mirrors continueErrorOutput intent).
+    }
+    logger.mem(`after:script:${i + 1}`);
+  }
+
+  // 5. Telegram alert (dynamic, count-safe).
+  if (savedScripts.length) {
+    await telegram.scriptsGeneratedAlert(savedScripts);
+  }
+
+  logger.mem('pipeline:end');
+  return { projectId: project.id, scriptCount: savedScripts.length, scripts: savedScripts };
+}
+
+=== package.json ===
+{
+  "name": "n8n-automation-project",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node.js replication of the n8n 'Video Script Generation Flow Agentic v4' workflow (Zl1MpttLGWdWFqRU): Research -> Idea -> Script (per-concept) -> Storyboard, with Airtable + Telegram + Gemini.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "pipeline": "node src/runPipeline.js",
+    "storyboard": "node src/runStoryboard.js",
+    "recover-ideas": "node src/runIdeaRecovery.js",
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "airtable": "^0.12.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  }
+}
+
+=== tests/ytdlp.test.js ===
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseNdjsonVideos } from '../src/clients/ytdlp.js';
+
+test('parses one video row per NDJSON line, keeping nulls for missing fields', () => {
+  const stdout = [
+    JSON.stringify({
+      title: 'What If Earth Stopped',
+      channel: 'WhatIfChannel',
+      view_count: 1234567,
+      upload_date: '20260715',
+      duration: 42,
+      url: 'https://www.youtube.com/watch?v=abc123',
+    }),
+    JSON.stringify({ title: 'No stats video' }), // flat extraction often omits fields
+  ].join('\n');
+
+  const rows = parseNdjsonVideos(stdout);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0], {
+    title: 'What If Earth Stopped',
+    channel: 'WhatIfChannel',
+    view_count: 1234567,
+    upload_date: '20260715',
+    duration: 42,
+    url: 'https://www.youtube.com/watch?v=abc123',
+  });
+  assert.deepEqual(rows[1], {
+    title: 'No stats video',
+    channel: null,
+    view_count: null,
+    upload_date: null,
+    duration: null,
+    url: null,
+  });
+});
+
+test('tolerates blank and malformed lines', () => {
+  const stdout = '\n{"title":"ok"}\nnot json at all\n\n{"title":"ok2"}\n';
+  const rows = parseNdjsonVideos(stdout);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].title, 'ok');
+  assert.equal(rows[1].title, 'ok2');
+});
+
+test('falls back to webpage_url and uploader when url/channel missing', () => {
+  const stdout = JSON.stringify({
+    title: 't',
+    uploader: 'SomeUploader',
+    webpage_url: 'https://www.youtube.com/watch?v=xyz',
+  });
+  const rows = parseNdjsonVideos(stdout);
+  assert.equal(rows[0].channel, 'SomeUploader');
+  assert.equal(rows[0].url, 'https://www.youtube.com/watch?v=xyz');
+});
+
+test('returns empty array for empty stdout', () => {
+  assert.deepEqual(parseNdjsonVideos(''), []);
+});
+
+=== tests/trendScout.test.js ===
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { normalizeQueries } from '../src/agents/trendScout/index.js';
+
+test('accepts a plain array of query strings, trimmed', () => {
+  assert.deepEqual(normalizeQueries(['  what if shorts ', 'space facts']), [
+    'what if shorts',
+    'space facts',
+  ]);
+});
+
+test('unwraps a { queries: [...] } object (LLMs often wrap arrays)', () => {
+  assert.deepEqual(normalizeQueries({ queries: ['a', 'b'] }), ['a', 'b']);
+});
+
+test('drops non-strings and empties, caps at 5', () => {
+  const raw = ['q1', '', 42, null, 'q2', 'q3', 'q4', 'q5', 'q6'];
+  assert.deepEqual(normalizeQueries(raw), ['q1', 'q2', 'q3', 'q4', 'q5']);
+});
+
+test('returns empty array for garbage input', () => {
+  assert.deepEqual(normalizeQueries('not an array'), []);
+  assert.deepEqual(normalizeQueries(null), []);
+  assert.deepEqual(normalizeQueries({ nope: true }), []);
+});
+
+=== tests/researchPrompt.test.js ===
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { buildResearchPrompt } from '../src/agents/research/prompt.js';
+
+const form = {
+  NICHE: 'What If',
+  PLATFORM: 'Facebook',
+  'TARGET AUDIENCE': 'US',
+  'CONTENT STYLE': 'Edutainment',
+  'CHANNEL DESCRIPTION (Optional)': 'What If FIFA, grounded physics',
+};
+
+test('without youtubeData the prompt is unchanged (no data section, backward compatible)', () => {
+  const base = buildResearchPrompt(form);
+  assert.ok(!base.includes('REAL YOUTUBE DATA'));
+  // Absent and empty youtubeData produce the identical prompt.
+  assert.equal(buildResearchPrompt(form, null), base);
+  assert.equal(buildResearchPrompt(form, undefined), base);
+  assert.equal(buildResearchPrompt(form, { queries: [], videos: [] }), base);
+});
+
+test('with youtubeData the prompt appends the data section listing rows', () => {
+  const youtubeData = {
+    queries: ['what if shorts'],
+    videos: [
+      {
+        title: 'What If Earth Stopped',
+        channel: 'WhatIfChannel',
+        view_count: 1234567,
+        upload_date: '20260715',
+        duration: 42,
+        url: 'https://www.youtube.com/watch?v=abc123',
+      },
+      { title: 'Sparse row', channel: null, view_count: null, upload_date: null, duration: null, url: null },
+    ],
+  };
+  const p = buildResearchPrompt(form, youtubeData);
+  assert.ok(p.startsWith(buildResearchPrompt(form))); // base prompt is a strict prefix
+  assert.ok(p.includes('REAL YOUTUBE DATA (via yt-dlp)'));
+  assert.ok(p.includes('what if shorts'));
+  assert.ok(p.includes('"What If Earth Stopped" — WhatIfChannel, 1234567 views, uploaded 20260715, 42s'));
+  assert.ok(p.includes('"Sparse row"')); // null fields are simply omitted, not printed as "null"
+  assert.ok(!p.includes('null'));
+});
+
