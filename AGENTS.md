@@ -37,7 +37,7 @@ The Storyboard Agent (the workflow's Schedule-trigger branch) is ported in `src/
 
 - `npm start` — builds the React dashboard when Vite is installed, then starts Express (`GET /health` and authenticated dashboard APIs), port from `PORT` (default 3000). Deployments without build dependencies must include prebuilt `dist/`.
 - `npm run dev` — backend with `--watch`; run `npm run dev:ui` in a second terminal for Vite hot reload on port 5173, proxying `/api` to Express.
-- `npm run build` — compile `client/` React JSX into gitignored `dist/`, served by Express.
+- `npm run build` — build React and the Nitro/Vercel backend plus durable Workflow handlers. `npm run build:ui` builds only React into `dist/` for the local Express server.
 - `npm run test:ui` — build and run browser workflow tests with mocked external services; install Chromium with `npx playwright install chromium` first. `npm run test:all` runs both suites.
 - `npm run pipeline` — one-shot run with the sample form in `src/runPipeline.js`.
 - `npm run storyboard` — one-shot storyboard poll (`src/runStoryboard.js`); schedule with cron.
@@ -128,3 +128,12 @@ The companion repo `D:\n8n-project-claude` holds the n8n workflow JSON files and
 - ~~`content_score` object-vs-number mismatch~~ — resolved: the schema accepts both; `flattenConcept` maps `content_score.overall` to the numeric Airtable column.
 - Gemini retries a transient primary or fallback 503 at most twice with short exponential backoff and jitter, then follows the existing primary->fallback and key-pool behavior. It does not retry 429s in place; quota handling still uses fallback and key rotation.
 
+
+## Vercel cloud execution
+
+- `npm run build` builds React plus Nitro/Vercel API and Workflow handlers; `npm run build:ui` builds React alone. Deployment uses `vercel.json`, not the previous Vite-only `dist` configuration. See `VERCEL_MIGRATION.md`.
+- `src/vercel.js` injects PostgreSQL-backed sessions, runs, schedules, limits and locks. It must never construct the default JSON stores, memory queue or in-process scheduler in cloud mode.
+- Cloud orchestration lives in `src/cloud/workflows.js`; shared script and storyboard workers remain authoritative. A `DEFERRED` error releases its execution slot and becomes a durable sleep, not a failed item or an ungrounded research result.
+- Keep provider work outside database transactions. Lease guards fence subsequent calls after heartbeat failure. Provider responses and YouTube metadata are checkpointed to prevent successful calls from repeating on replay. Do not serialize API keys or database URLs into Workflow inputs/outputs.
+- Vercel uses official YouTube Data API metadata, configured by server-only `YOUTUBE_API_KEY`. Local operator execution still supports yt-dlp. `DATABASE_URL` and `CRON_SECRET` are server-only.
+- Local-to-cloud state import requires stopped servers: `npm run db:migrate -- --import-local --servers-stopped`. Do not run local and cloud schedulers concurrently against production Airtable; their locking systems differ.

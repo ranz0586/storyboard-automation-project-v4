@@ -64,10 +64,12 @@ const server=app.listen(0,'127.0.0.1',()=>process.send({port:server.address().po
     assert.equal(accepted.status, 202);
     const { run } = await accepted.json();
     await poll(initial.base, run.id, headers, value => value.successfulCount === 1 && value.currentItem === 'localRestartTwo');
-    // Confirm the second generation actually acquired its lock before crashing.
+    // Wait for the fixture's second provider call, not merely lock creation.
+    // A lock can exist before generation starts, especially under parallel test load.
     const lock = path.join(directory, 'script-locks', createHash('sha256').update('idea_localRestartTwo').digest('hex'));
-    for (let attempt = 0; attempt < 100 && !fs.existsSync(lock); attempt++) await new Promise(resolve => setTimeout(resolve, 10));
-    assert.ok(fs.existsSync(lock));
+    const started=()=>fs.existsSync(lock)&&JSON.parse(fs.readFileSync(path.join(directory,'provider.json'))).generations===2;
+    for(let attempt=0;attempt<100&&!started();attempt++)await new Promise(resolve=>setTimeout(resolve,10));
+    assert.ok(started(),'second provider call must start before crashing');
     const exited = once(initial.child, 'exit'); initial.child.kill(); await exited;
     // Advance only the isolated abandoned lock's lease. Production keeps the
     // ten-minute crash-recovery delay; this test proves recovery after expiry.

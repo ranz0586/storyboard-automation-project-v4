@@ -6,3 +6,14 @@ data/
 dist/
 playwright-report/
 test-results/
+/.swc
+
+.vercel/
+.nitro/
+.output/
+.workflow-data/
+.history/.env_20261003040355
+.history/.env_20261006061918
+.history/.env_20261006061919
+.history/.env_20261006061934
+.history/.env_20261006073147

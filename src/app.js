@@ -45,8 +45,10 @@ export function createApp({
   scriptRunController,
   scheduleStore,
   ideaRunController,
+  onScriptApproved,
 } = {}) {
   const app = express();
+  const asyncRoute = handler => (req,res,next) => Promise.resolve(handler(req,res,next)).catch(next);
   const queue = pipelineQueue || new TaskQueue({
     maxConcurrency: config.server.maxConcurrentPipelines,
     maxQueued: config.server.maxQueuedPipelines,
@@ -101,11 +103,11 @@ export function createApp({
     if (id !== undefined && !ownsProject(req, id)) return res.status(404).json({ error: 'Project not found' });
     next();
   });
-  app.use('/api/script-runs/:id', (req, res, next) => {
-    const run = store.get(req.params.id);
+  app.use('/api/script-runs/:id', asyncRoute(async (req, res, next) => {
+    const run = await store.get(req.params.id);
     if (!run || !ownsProject(req, run.projectId)) return res.status(404).json({ error: 'Pipeline run not found' });
     next();
-  });
+  }));
   const projectError = (res, err, fallback) => {
     if (err?.statusCode === 404 || err?.status === 404) return res.status(404).json({ error: 'Record not found' });
     if (err?.statusCode === 409) return res.status(409).json({ error: err.message });
@@ -180,12 +182,12 @@ export function createApp({
       await client.getProject(req.params.id);
       // Disable recurrence before pausing. A failed status write leaves the
       // schedule safely disabled; the caller receives an explicit error.
-      const existing = schedules.get(req.params.id);
+      const existing = await schedules.get(req.params.id);
       if (req.validatedBody.status !== 'Active' && existing?.enabled) {
-        schedules.set(req.params.id, { ...existing, enabled: false });
+        await schedules.set(req.params.id, { ...existing, enabled: false });
       }
       const project = await client.updateProjectStatus(req.params.id, req.validatedBody.status);
-      return res.json({ project, schedule: schedules.get(req.params.id) });
+      return res.json({ project, schedule: await schedules.get(req.params.id) });
     } catch (err) {
       return projectError(res, err, 'Project status could not be updated; refresh the project and schedule');
     }
@@ -208,12 +210,16 @@ export function createApp({
       const script = await client.getScript(req.params.scriptId);
       if (!belongsToProject(script, project)) return res.status(404).json({ error: 'Script not found in this project' });
       // Retried approvals must never turn a completed storyboard back into work.
-      if (['Approved', 'Story Generated'].includes(script.fields.status)) return res.json({ script });
+      if (['Approved', 'Story Generated'].includes(script.fields.status)) {
+        if (script.fields.status === 'Approved') await onScriptApproved?.({script,project});
+        return res.json({ script });
+      }
       assertProjectActive(project);
       if (script.fields.status !== 'Draft' || !isUsableScriptRecord(script)) {
         return res.status(409).json({ error: 'Only a complete Draft script can be approved' });
       }
       const updated = await client.updateScript(script.id, { status: 'Approved' });
+      await onScriptApproved?.({script:updated,project});
       return res.json({ script: updated });
     } catch (err) {
       if (err?.statusCode === 422 && err?.error === 'INVALID_MULTIPLE_CHOICE_OPTIONS') {
@@ -244,7 +250,7 @@ export function createApp({
     async (req, res) => {
       try {
         assertProjectActive(await makeAirtable().getProject(req.params.id));
-        const run = ideaRuns.create({ projectId: req.params.id, count: req.validatedBody.count });
+        const run = await ideaRuns.create({ projectId: req.params.id, count: req.validatedBody.count });
         if (!run) return res.status(503).json({ error: 'Pipeline queue is full' });
         return res.status(202).json({ run });
       } catch (err) { return projectError(res, err, 'Idea run could not be started'); }
@@ -257,40 +263,40 @@ export function createApp({
     async (req, res) => {
       try {
         assertProjectActive(await makeAirtable().getProject(req.validatedBody.projectId));
-        const run = runs.create(req.validatedBody);
+        const run = await runs.create(req.validatedBody);
         if (!run) return res.status(503).json({ error: 'Pipeline queue is full' });
         return res.status(202).json({ run });
       } catch (err) { return projectError(res, err, 'Script run could not be started'); }
     }
   );
 
-  app.get('/api/script-runs', (req, res) => {
-    return res.json({ runs: store.list({ projectId: req.query.projectId, projectIds: req.user.projectIds, limit: req.query.limit }) });
-  });
+  app.get('/api/script-runs', asyncRoute(async (req, res) => {
+    return res.json({ runs: await store.list({ projectId: req.query.projectId, projectIds: req.user.projectIds, limit: req.query.limit }) });
+  }));
 
-  app.get('/api/script-runs/:id', (req, res) => {
-    const run = store.get(req.params.id);
+  app.get('/api/script-runs/:id', asyncRoute(async (req, res) => {
+    const run = await store.get(req.params.id);
     if (!run) return res.status(404).json({ error: 'Pipeline run not found' });
     return res.json({ run });
-  });
+  }));
 
-  app.post('/api/script-runs/:id/retry', async (req, res) => {
-    const prior = store.get(req.params.id);
+  app.post('/api/script-runs/:id/retry', asyncRoute(async (req, res) => {
+    const prior = await store.get(req.params.id);
     if (!prior) return res.status(404).json({ error: 'Pipeline run not found' });
     try { assertProjectActive(await makeAirtable().getProject(prior.projectId)); }
     catch (err) { return projectError(res, err, 'Retry could not be started'); }
-    const result = runs.retry(req.params.id);
+    const result = await runs.retry(req.params.id);
     if (result?.error === 'NOT_FOUND') return res.status(404).json({ error: 'Pipeline run not found' });
     if (result?.error === 'NO_FAILED_ITEMS') {
       return res.status(409).json({ error: 'Pipeline run has no failed ideas to retry' });
     }
     if (!result) return res.status(503).json({ error: 'Pipeline queue is full' });
     return res.status(202).json({ run: result });
-  });
+  }));
 
-  app.get('/api/projects/:id/schedule', (req, res) => {
-    return res.json({ schedule: schedules.get(req.params.id) });
-  });
+  app.get('/api/projects/:id/schedule', asyncRoute(async (req, res) => {
+    return res.json({ schedule: await schedules.get(req.params.id) });
+  }));
 
   app.put(
     '/api/projects/:id/schedule',
@@ -299,7 +305,7 @@ export function createApp({
       try {
         const project = await makeAirtable().getProject(req.params.id);
         if (req.validatedBody.enabled) assertProjectActive(project);
-        const schedule = schedules.set(req.params.id, req.validatedBody);
+        const schedule = await schedules.set(req.params.id, req.validatedBody);
         return res.json({ schedule });
       } catch (err) {
         if (err?.statusCode === 409) return res.status(409).json({ error: err.message });
@@ -318,5 +324,9 @@ export function createApp({
     res.status(410).json({ error: 'Use project idea runs and script runs in the dashboard' });
   });
 
+  app.use((error,req,res,next) => {
+    if (res.headersSent) return next(error);
+    res.status(503).json({error:'Service is temporarily unavailable'});
+  });
   return app;
 }

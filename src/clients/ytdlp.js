@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { searchYouTubeApi } from './youtube.js';
 
 // Thin wrapper around the yt-dlp binary for YouTube SEARCH METADATA only.
 // Node-only addition (no n8n counterpart). Flat extraction: no video pages,
@@ -42,6 +43,7 @@ export function parseNdjsonVideos(stdout) {
 // failure/timeout/non-zero exit — the Trend Scout agent handles degradation.
 export function searchYouTube(query, { limit, timeoutMs } = {}) {
   const n = limit ?? config.ytdlp.searchLimit;
+  if (config.ytdlp.provider === 'api') return searchYouTubeApi(query, {limit:n,timeoutMs:timeoutMs??config.ytdlp.timeoutMs});
   const t = timeoutMs ?? config.ytdlp.timeoutMs;
   const args = [`ytsearch${n}:${query}`, '--dump-json', '--flat-playlist', '--no-warnings'];
 

@@ -8,13 +8,13 @@ import { assertUsableStoryboard, isUsableStoryboardRecord } from './utils/storyb
 // Shared by server polls and operator runs. The lock covers fresh lifecycle
 // reads, generation, persistence and completion, including retries after an
 // ambiguous write or a failed Script status update.
-export async function processScriptStoryboard({ scriptRecord, clients, onStart }) {
+export async function processScriptStoryboard({ scriptRecord, clients, onStart, withLock = withFileLock }) {
   const { airtable, gemini } = clients;
   const storyboardId = scriptRecord.fields.video_id;
   if (typeof storyboardId !== 'string' || !storyboardId.trim()) {
     throw new Error('Cannot generate storyboard without a script video_id');
   }
-  return withFileLock(`storyboard:${storyboardId}`, async () => {
+  return withLock(`storyboard:${storyboardId}`, async () => {
     const script = await airtable.getScript(scriptRecord.id);
     if (script.fields.video_id !== storyboardId) throw new Error('Script identity changed during storyboard processing');
     if (script.fields.status !== 'Approved') return { skipped: true, generated: false };

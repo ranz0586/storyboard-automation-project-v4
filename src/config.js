@@ -36,6 +36,7 @@ export const config = {
   // yt-dlp Trend Scout (Node-only addition; not part of the n8n workflow).
   ytdlp: {
     path: process.env.YTDLP_PATH || 'yt-dlp',
+    provider: process.env.YOUTUBE_PROVIDER || (process.env.VERCEL || process.env.CLOUD_RUNTIME === 'true' ? 'api' : 'yt-dlp'),
     searchLimit: Number(process.env.YTDLP_SEARCH_LIMIT) || 15,
     timeoutMs: Number(process.env.YTDLP_TIMEOUT_MS) || 60_000,
     // Default on; set TREND_SCOUT_ENABLED=false to skip the scout entirely.

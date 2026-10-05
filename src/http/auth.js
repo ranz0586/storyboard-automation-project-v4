@@ -35,11 +35,12 @@ export function createUserAuth({ makeAirtable, now = Date.now,
   sessionTtlMs = config.server.sessionTtlMs,
   secureCookies = config.server.secureCookies,
   lockDir = config.locks.userDir,
+  sessionStore, withLock = withFileLock,
   loginRateLimiter = createRateLimiter({ limit: 10, windowMs: 15 * 60_000 }),
   sessionRateLimiter = createRateLimiter({ limit: config.server.readRateLimitMax,
     windowMs: config.server.rateLimitWindowMs }),
 } = {}) {
-  const sessions = new Map();
+  const sessions = sessionStore || new Map();
   let passwordBusy = false;
   const cookieOptions = { httpOnly: true, sameSite: 'strict', secure: secureCookies, path: '/' };
   function sessionKey(req) {
@@ -47,47 +48,51 @@ export function createUserAuth({ makeAirtable, now = Date.now,
       .find(v => v.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
     return value && /^[a-f0-9]{64}$/.test(value) ? digest(value) : null;
   }
-  function issueSession(req, res, record) {
-    for (const [key, value] of sessions) if (value.expiresAt <= now()) sessions.delete(key);
+  async function issueSession(req, res, record) {
+    if (sessions instanceof Map) { for (const [key, value] of sessions) if (value.expiresAt <= now()) sessions.delete(key); }
+    else await sessions.cleanup();
     if (sessions.size >= 10000) throw new Error('Session capacity reached');
     const oldKey = sessionKey(req);
-    if (oldKey) sessions.delete(oldKey);
+    if (oldKey) await sessions.delete(oldKey);
     const token = randomBytes(32).toString('hex');
-    sessions.set(digest(token), { userId: record.id,
+    await sessions.set(digest(token), { userId: record.id,
       passwordDigest: digest(record.fields.password_hash), expiresAt: now() + sessionTtlMs });
     res.cookie(cookieName, token, { ...cookieOptions, maxAge: sessionTtlMs });
   }
-  function activeSession(req) {
-    const key = sessionKey(req), session = key && sessions.get(key);
+  async function activeSession(req) {
+    const key = sessionKey(req), session = key && await sessions.get(key);
     if (!session || session.expiresAt <= now()) {
-      if (key) sessions.delete(key);
+      if (key) await sessions.delete(key);
       return null;
     }
     return { key, session };
   }
-  function requireSession(req, res, next) {
-    const active = activeSession(req);
-    if (!active) return res.status(401).json({ error: 'Please log in' });
-    // Only a locally validated opaque session supplies this key. Group devices
-    // for the same account and do not let forwarded-IP changes bypass limits.
-    req.authRateLimitKey = active.session.userId;
-    next();
+  async function requireSession(req, res, next) {
+    try {
+      const active = await activeSession(req);
+      if (!active) return res.status(401).json({ error: 'Please log in' });
+      req.authSession = active;
+      req.authRateLimitKey = active.session.userId;
+      next();
+    } catch { return res.status(503).json({ error: 'Login service is temporarily unavailable' }); }
   }
   async function authenticate(req, res, next) {
-    const active = activeSession(req);
+    let active;
+    try { active = req.authSession || await activeSession(req); }
+    catch { return res.status(503).json({ error: 'Login service is temporarily unavailable' }); }
     if (!active) return res.status(401).json({ error: 'Please log in' });
     const { key, session } = active;
     try {
       const record = await makeAirtable().getUser(session.userId);
       if (record.fields.status !== 'Active' || digest(record.fields.password_hash || '') !== session.passwordDigest) {
-        sessions.delete(key);
+        await sessions.delete(key);
         return res.status(401).json({ error: 'Please log in' });
       }
       req.user = publicUser(record);
       next();
     } catch (err) {
       if (err.statusCode === 404 || err.status === 404) {
-        sessions.delete(key);
+        await sessions.delete(key);
         return res.status(401).json({ error: 'Please log in' });
       }
       return res.status(503).json({ error: 'Login service is temporarily unavailable' });
@@ -108,7 +113,7 @@ export function createUserAuth({ makeAirtable, now = Date.now,
           const input = parsed.data, client = makeAirtable();
           let record;
           if (action === 'register') {
-            record = await withFileLock(`user:${input.username}`, async () => {
+            record = await withLock(`user:${input.username}`, async () => {
               if (await client.findUserByUsername(input.username)) return null;
               return client.createUser({ username: input.username, full_name: input.fullName,
                 email: input.email, password_hash: await hashPassword(input.password), status: 'Active' });
@@ -121,7 +126,7 @@ export function createUserAuth({ makeAirtable, now = Date.now,
               return res.status(401).json({ error: 'Invalid username or password' });
             }
           }
-          issueSession(req, res, record);
+          await issueSession(req, res, record);
           return res.status(action === 'register' ? 201 : 200).json({ user: publicUser(record) });
         } catch {
           return res.status(503).json({ error: 'Login service is temporarily unavailable' });
@@ -129,11 +134,13 @@ export function createUserAuth({ makeAirtable, now = Date.now,
       });
     }
     app.get('/api/auth/me', requireSession, sessionRateLimiter, authenticate, (req, res) => res.json({ user: req.user }));
-    app.post('/api/auth/logout', requireSameOriginWrite, (req, res) => {
+    app.post('/api/auth/logout', requireSameOriginWrite, async (req, res, next) => {
+      try {
       const key = sessionKey(req);
-      if (key) sessions.delete(key);
+      if (key) await sessions.delete(key);
       res.clearCookie(cookieName, cookieOptions);
       res.json({ ok: true });
+      } catch (error) { next(error); }
     });
   }
   return { mount, authenticate, requireSession };

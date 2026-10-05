@@ -21,7 +21,7 @@ export function normalizeQueries(raw) {
 // compact video metadata for the Research Agent's prompt.
 // EVERY failure path returns null — the pipeline must degrade gracefully
 // (research runs without real data), never abort because of scraping.
-export async function trendScoutAgent(gemini, form) {
+export async function trendScoutAgent(gemini, form, { search = searchYouTube } = {}) {
   if (!config.ytdlp.enabled) {
     logger.info('Trend Scout disabled (TREND_SCOUT_ENABLED=false)');
     return null;
@@ -36,6 +36,7 @@ export async function trendScoutAgent(gemini, form) {
     });
     queries = normalizeQueries(raw);
   } catch (err) {
+    if (err?.code === 'DEFERRED') throw err;
     logger.warn('Trend Scout query planning failed — continuing without YouTube data', err?.message);
     return null;
   }
@@ -50,11 +51,12 @@ export async function trendScoutAgent(gemini, form) {
   for (const query of queries) {
     if (videos.length >= MAX_TOTAL_VIDEOS) break;
     try {
-      const rows = await searchYouTube(query);
+      const rows = await search(query);
       videos.push(...rows.slice(0, MAX_TOTAL_VIDEOS - videos.length));
       logger.info(`Trend Scout "${query}": ${rows.length} videos`);
     } catch (err) {
-      logger.warn(`Trend Scout yt-dlp failed for "${query}"`, err?.message);
+    if (err?.code === 'DEFERRED') throw err;
+      logger.warn(`Trend Scout metadata search failed for "${query}"`, err?.message);
     }
   }
 

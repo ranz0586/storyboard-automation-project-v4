@@ -1,0 +1,12 @@
+{
+  "framework": "nitro",
+  "buildCommand": "npm run build",
+  "installCommand": "npm ci",
+  "outputDirectory": null,
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

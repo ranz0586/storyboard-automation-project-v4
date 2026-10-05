@@ -27,7 +27,7 @@ The seven implementation findings from the earlier review have been addressed. L
 
 ## Remaining boundaries
 
-1. **Deployment:** the user confirmed the app is not deployed and runs locally. Durable hosting disk, deployed restarts, sessions and lock behavior remain pending.
+1. **Deployment:** the React frontend is published on Vercel, but the latest read-only checks return 404 NOT_FOUND for /health and /api/auth/me. The login endpoint also returned 404 in the earlier invalid-body probe. API deployment/routing must be established before verifying deployed sessions, persistence or restarts. The current JSON stores, in-memory sessions/queue and interval scheduler require a persistent Node backend or adaptation for Vercel functions.
 2. **Live output quality:** complex generated output still failed repair. Deterministic rejection works; actual TTS timing, visual quality and rendered video alignment need separate verification.
 3. **Provider load:** statistics correctness is preserved, but the measured request count is expensive. Mocked timing and memory do not prove real Airtable latency/quota behavior or simultaneous provider load.
 4. **Multiple processes:** JSON coordination supports processes on the same host sharing configured paths. It does not coordinate process-local queues, sessions or Gemini cooldowns. Cross-host deployment requires a database and a shared session/limit strategy. Active/unresolved runs may exceed the normal retention target.
@@ -36,3 +36,26 @@ The seven implementation findings from the earlier review have been addressed. L
 README.md, AGENTS.md, CLAUDE.md and GOAL.md document these behaviors and limits. Statistics counts, scalar project keys, schedule edit/re-enable behavior and the React migration are resolved rather than pending defects.
 
 Deployment acceptance steps and required evidence are preserved in [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md).
+
+## Full Vercel migration — local evidence (2026-10-05)
+
+- React plus the Express API now build through Nitro to Vercel Build Output API, including Workflow queue/webhook routing. Runtime provider prompts and agents remain Gemini-based.
+- PostgreSQL replaces cloud JSON stores, process-local sessions, quotas, queues and filesystem locks. Durable Workflow sleeps implement cooldowns/weekly schedules, with first-owner claims, occurrence uniqueness, outbox reconciliation and interrupted-run recovery.
+- Official YouTube Data API replaces local yt-dlp for cloud metadata. Local operator execution retains yt-dlp.
+- Added safe opt-in import of local history/schedules; original cloud rows win and active local runs become Interrupted.
+- Final backend suite: **155 passed**. Cloud-specific coverage uses real isolated PostgreSQL through PGlite with mocked providers. Browser suite: **6 passed**. A first full run hit the existing restart test timeout while repeatedly starting PostgreSQL engines; reusing one isolated test engine removed the resource contention, and the full suite plus final backend run passed.
+- Full Vercel build and isolated emitted-handler checks passed: static routing, Workflow queue trigger, missing-database 503, unauthorized cron 401, invalid-method cron 405. These are local artifact checks, not deployed endpoint verification.
+- npm audit reports **0 vulnerabilities** after compatible overrides for devalue, nanoid and qs. Credential scanning across 93 deployment files found none of the nine configured credential values.
+- PostgreSQL provisioning, schema application, new Vercel environment variables, redeployment and live cloud acceptance remain pending. No new live provider calls, Airtable writes or Telegram messages were made for this migration. No commit or push was made.
+
+## Supabase runtime setup — 2026-10-06
+
+The supplied SUPABASE_POOLER PostgreSQL URI is supported as an alternative to DATABASE_URL (DATABASE_URL takes precedence). Migration was applied successfully to the configured Supabase project. All eight app_* tables were verified present, empty, with RLS enabled and SELECT denied to anon/authenticated. Client TLS was encrypted and its certificate verified using Supabase's public Root 2021 CA, bundled for serverless execution.
+
+A local cloud API connected to the real Supabase database returned /health 200 and logged-out /api/auth/me 401. This was a read-only readiness check; no Gemini calls, Airtable changes, Telegram messages or local-history imports occurred.
+
+Final backend suite: 156 passed. Vercel build and emitted-handler checks passed. npm audit: zero vulnerabilities. An existing restart-test race was corrected by waiting for the fixture's second provider call before terminating the worker, rather than treating lock creation as proof that generation began.
+
+Supabase's optional Node Data API client now loads environment variables via process.env and initializes lazily, with SDK dependency installed. It does not replace the SQL transaction adapter or Airtable authentication/content.
+
+Still pending: configure SUPABASE_POOLER in Vercel if not already present, redeploy the modified source and perform deployed acceptance checks. No commit or push was made.

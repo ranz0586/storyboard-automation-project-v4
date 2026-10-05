@@ -2,12 +2,12 @@
 
 Dashboard-controlled, memory-efficient Node.js implementation of the n8n workflow **Video Script Generation Flow Agentic v4** (`Zl1MpttLGWdWFqRU`).
 
-The dashboard at `/` is the primary control plane. It supports explicit Airtable projects, project statistics, idea generation, count-based and selected-idea script runs, live progress, safe failure retry, and weekly schedules. The original `/niche` full pipeline remains available for compatibility.
+The dashboard at `/` is the primary control plane. It supports explicit Airtable projects, project statistics, idea generation, count-based and selected-idea script runs, live progress, safe failure retry, and weekly schedules. The implicit-project `/niche` endpoint is retired (410).
 
 It reproduces the `NicheForm` branch as a plain Node service:
 
 ```
-Form (POST /niche)
+Operator CLI form
   -> Save Project (Airtable)
   -> Trend Scout (yt-dlp, optional)
   -> Research Agent (Gemini)
@@ -33,7 +33,11 @@ memory at once (plus large shared Postgres chat memory), which contributed to th
 the 512MB host. This port generates and persists **one script at a time**, so peak memory holds a
 single script. Heap/RSS is logged after each stage (`logger.mem`).
 
-## Setup
+## Vercel deployment
+
+See [VERCEL_MIGRATION.md](VERCEL_MIGRATION.md) for the full dashboard/API/Workflow deployment, PostgreSQL setup, YouTube API and state import. The old Vite-only deployment must use the checked-in Nitro settings.
+
+## Local setup
 
 ```bash
 cd D:\n8n-automation-project

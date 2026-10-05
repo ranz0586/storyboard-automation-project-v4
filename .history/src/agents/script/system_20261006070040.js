@@ -230,7 +230,7 @@ If a narration naturally contains two ideas, split it into two scenes.
 3-second scenes
 • Target: 7-8 words
 • Maximum: 9 words
-• Each scene narration must fit at 150–180 words per minute.
+• Each scene narration must fit at 150–180 words per minute. 
 
 Never force multiple ideas into one scene.
 If the narration does not comfortably fit within the intended scene duration:

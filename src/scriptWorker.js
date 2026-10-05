@@ -38,10 +38,10 @@ export function isUsableScriptRecord(record) {
 // The one authoritative per-idea generation path. Normal runs, recovery,
 // manual runs, and scheduled runs all converge here and remain sequential in
 // their respective controllers.
-export async function processIdeaScript({ idea, concept, form, projectKey, gemini, airtable }) {
+export async function processIdeaScript({ idea, concept, form, projectKey, gemini, airtable, withLock = withFileLock }) {
   const scriptId = scriptIdForIdea(idea);
   while (inFlight.has(scriptId)) await inFlight.get(scriptId);
-  const execution = withFileLock(scriptId, () => processUnlocked({
+  const execution = withLock(scriptId, () => processUnlocked({
     scriptId,
     idea,
     concept,

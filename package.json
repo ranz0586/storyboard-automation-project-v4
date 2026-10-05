@@ -6,7 +6,7 @@
   "description": "Node.js replication of the n8n 'Video Script Generation Flow Agentic v4' workflow (Zl1MpttLGWdWFqRU): Research -> Idea -> Script (per-concept) -> Storyboard, with Airtable + Telegram + Gemini.",
   "main": "src/index.js",
   "scripts": {
-    "build": "vite build",
+    "build": "npm run build:ui && nitro build",
     "prestart": "node scripts/ensure-ui-build.mjs",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
@@ -15,24 +15,41 @@
     "storyboard": "node src/runStoryboard.js",
     "recover-ideas": "node src/runIdeaRecovery.js",
     "test": "node --test \"tests/**/*.test.js\"",
-    "test:ui": "npm run build && playwright test",
-    "test:all": "npm test && npm run test:ui"
+    "test:ui": "npm run build:ui && playwright test",
+    "test:all": "npm test && npm run test:ui",
+    "build:ui": "vite build",
+    "dev:cloud": "nitro dev",
+    "db:migrate": "node scripts/migrate-cloud.mjs",
+    "test:vercel": "npm run build && node scripts/check-vercel-build.mjs"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "@supabase/supabase-js": "^2.117.2",
     "airtable": "^0.12.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "nitro": "^3.0.260903-beta",
+    "pg": "^8.23.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "rollup": "^4.64.0",
+    "workflow": "^5.0.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@playwright/test": "^1.63.0",
     "@vitejs/plugin-react": "^6.1.1",
     "vite": "^8.3.2"
+  },
+  "overrides": {
+    "@workflow/core": {
+      "nanoid": "^5.1.16"
+    },
+    "devalue": "^5.9.4",
+    "qs": "^6.16.0"
   }
 }

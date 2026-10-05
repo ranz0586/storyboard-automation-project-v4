@@ -19,9 +19,9 @@ export function formFromProject(project) {
   };
 }
 
-export async function generateIdeasForProject({ project, count, gemini, airtable, onSaved }) {
+export async function generateIdeasForProject({ project, count, gemini, airtable, onSaved, search }) {
   const form = formFromProject(project);
-  let youtubeData = await trendScoutAgent(gemini, form);
+  let youtubeData = await trendScoutAgent(gemini, form, { search });
   logger.mem('idea-run:after:trendScout');
   let research = await researchAgent(gemini, form, youtubeData);
   youtubeData = null;
