@@ -41,8 +41,10 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   await refresh(page);
   await expect(page.locator('#ideas input[type=checkbox]')).toHaveCount(3);
   await page.getByLabel('Script count', { exact: true }).fill('1');
-  await page.getByRole('button', { name: 'Generate by count', exact: true }).click();
+  await page.getByRole('button', { name: 'Recover drafts', exact: true }).click();
   await expect.poll(async () => (await state(request)).scripts.length).toBe(2);
+  await refresh(page);
+  await expect(page.getByText('SCRIPTS · RECOVERY', { exact: true })).toBeVisible();
 
   await page.getByLabel('Status', { exact: true }).selectOption('true');
   await page.getByLabel('Day', { exact: true }).selectOption('1');

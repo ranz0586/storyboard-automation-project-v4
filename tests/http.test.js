@@ -222,3 +222,27 @@ test('schedule API validates and updates a project weekly schedule', async () =>
     assert.equal((await loaded.json()).schedule.enabled, true);
   });
 });
+
+
+test('recovery API is scoped, bounded and uses the shared script controller', async () => {
+  const calls = [];
+  const client = { getProject: async id => ({ id, fields: { status: 'Active' } }) };
+  const app = testApp({ makeAirtable: () => client,
+    scriptRunController: { create: async (input, options) => {
+      calls.push({ input, options }); return { id: 'recovery-run', ...input, source: options.source };
+    } },
+  });
+  await withServer(app, async base => {
+    const headers = { 'content-type': 'application/json', ...await login(base) };
+    const post = (id, count) => fetch(base + '/api/projects/' + id + '/recovery-runs',
+      { method: 'POST', headers, body: JSON.stringify({ count }) });
+    assert.equal((await post('recOther', 1)).status, 404);
+    assert.equal((await post('recProject1', 51)).status, 400);
+    assert.equal(calls.length, 0);
+    const response = await post('recProject1', 2);
+    assert.equal(response.status, 202);
+    assert.equal((await response.json()).run.source, 'RECOVERY');
+    assert.deepEqual(calls, [{ input: { projectId: 'recProject1', mode: 'count', count: 2 },
+      options: { source: 'RECOVERY' } }]);
+  });
+});

@@ -74,6 +74,7 @@ export class CloudState {
             (await tx.query('SELECT payload FROM app_runs WHERE id=$1', [prior.recoveredByRunId]))
               .rows[0]?.payload || { error: 'NO_FAILED_ITEMS' }
           );
+        source = prior.source === 'RECOVERY' ? 'RECOVERY' : source;
         if (prior.type !== 'SCRIPTS' || ['QUEUED', 'RUNNING'].includes(prior.status))
           return { error: 'NO_FAILED_ITEMS' };
         const success = new Set(

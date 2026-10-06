@@ -1,6 +1,6 @@
 # Vercel migration acceptance
 
-The migration source and local checks are ready. Follow [VERCEL_MIGRATION.md](VERCEL_MIGRATION.md) to provision PostgreSQL, set server-only DATABASE_URL/YOUTUBE_API_KEY/CRON_SECRET, apply the schema and redeploy with Nitro settings.
+The production backend and Supabase runtime database are reachable. Deployed login, session restoration, owned-project reads and logout passed on 2026-10-07. Airtable remains the account/content store; Supabase coordinates runtime state. Background generation, scheduling and restart/replay acceptance remain open. See the dated evidence below and [VERCEL_MIGRATION.md](VERCEL_MIGRATION.md) for configuration.
 
 Before closing deployed verification, confirm:
 1. The deployed /health is 200 and logged-out /api/auth/me is 401.
@@ -10,11 +10,11 @@ Before closing deployed verification, confirm:
 5. One explicitly authorized approval job writes a usable storyboard and completes its Script status. Direct Airtable approval discovery respects STORYBOARD_POLL_MS.
 6. Record the deployed version, Workflow run IDs, project/content identities and quota/write effects without credentials.
 
-No cloud database was provisioned and no new version was deployed during local implementation. The tests below describe the earlier persistent-server acceptance plan; their filesystem/session-revocation expectations apply only to the legacy local runtime.
+Historical boundary: initial local implementation did not provision or deploy the cloud runtime. Supabase provisioning and deployed access were subsequently verified in the dated sections below. The earlier persistent-server plan uses filesystem/session-revocation expectations that apply only to the legacy local runtime.
 
 ---
 
-# Deployment verification pending
+# Historical persistent-server acceptance plan
 
 The React frontend is published at https://storyboard-automation-project.vercel.app/. The latest read-only probe returned HTTP 200 for the dashboard and Vercel 404 NOT_FOUND for both /health and /api/auth/me. The earlier invalid-body POST to /api/auth/login also returned 404. The Express backend is therefore not reachable through the frontend origin. Deployment verification now depends on connecting a backend and choosing durable storage/job execution; a published frontend is not evidence of deployed pipeline persistence. Local process restart checks remain local evidence only.
 
@@ -57,3 +57,48 @@ Final backend suite: 156 passed. Vercel build and emitted-handler checks passed.
 Supabase's optional Node Data API client now loads environment variables via process.env and initializes lazily, with SDK dependency installed. It does not replace the SQL transaction adapter or Airtable authentication/content.
 
 Still pending: configure SUPABASE_POOLER in Vercel if not already present, redeploy the modified source and perform deployed acceptance checks. No commit or push was made.
+
+## Deployed access verification — 2026-10-07
+
+The owner confirmed successful application login and project loading on https://storyboard-automation-project-1lghl2ogq-ranz-s-projects.vercel.app/. That immutable URL redirects unauthenticated external probes to Vercel authentication (302), so its authenticated UI result is owner-reported.
+
+Independent read-only checks against https://storyboard-automation-project.vercel.app confirmed /health HTTP 200 with {"ok":true} and logged-out /api/auth/me HTTP 401 with "Please log in". The production backend is now reachable and passes its database/schema readiness check, replacing the earlier Vercel 404 behavior.
+
+Background Workflow execution, live content generation, schedules, storyboard completion and restart/replay behavior still need deployed acceptance evidence. These probes did not authenticate an application account, launch workflows, call Gemini, write Airtable content or send Telegram alerts.
+
+## Deployed live-account verification — 2026-10-07
+
+Using LIVE_USER/LIVE_PASS without logging their values, the production app passed login (200), two authenticated session restores (200), owned-project/statistics reads (200), run history (200), schedule reads (200), logout (200), and rejection of the revoked session (401). The test's newly issued cookie remained in memory and was revoked after the checks.
+
+The first owned page contains the dedicated project "Codex live check 8f4f936f" (recQk9DQQODeGqDzy), with zero ideas/scripts/storyboards and schedule disabled. History was empty; successful history reads do not prove background persistence yet. Another project page is available.
+
+Evidence: data/deployed-account-verification.json (only sanitized check results, no credentials/cookies). No generation job, schedule change, Airtable content write or Telegram alert was triggered. Approval for a one-concept deployed pipeline test is pending because previous live authorization was local-output-only.
+
+
+## Seven-item completion audit — 2026-10-07
+
+Completion is not yet proven. The production read-only account evidence is current; mocked tests and local process tests do not prove deployed provider effects or Vercel restarts.
+
+| Goal item | Current evidence | Remaining acceptance boundary |
+| --- | --- | --- |
+| 1. Interrupted-run retry buttons | client/src/App.jsx renders resume for interrupted script runs, suppresses repeated retries through recoveredByRunId; tests/scriptRunController.test.js and tests/ui/dashboard.spec.js cover unfinished-only resume. Cloud state tests cover retry links across adapter instances. | Exercise a genuinely interrupted deployed workflow and confirm the dashboard resumes only unfinished identities. |
+| 2. Throttle authentication/Airtable reads | tests/http.test.js covers rejecting writes before authentication reads and independent read limits. src/vercel.js injects shared database limits and sessions. Deployed login/session/read/logout checks passed. | No production flood or deliberate quota exhaustion was performed. |
+| 3. Storyboard reuse and usability | Shared src/storyboardWorker.js is used by local and cloud execution. tests/storyboardPipeline.test.js covers unusable/wrong-identity output regeneration; tests/activity.test.js covers saved-output reuse after status-write failure. | An approved deployed script must produce one usable storyboard and complete status; ambiguous production effects remain untested. |
+| 4. Shared run/schedule coordination | src/cloud/state.js and coordination.js use PostgreSQL transactions/leases. Supabase schema and verified TLS passed. tests/cloud.test.js covers cross-instance state, retries, occurrence identity and capacity; tests/sharedState.test.js covers actual local processes. | Cloud adapter tests use a test database implementation. Actual Vercel workflow restart/reconciliation and schedule occurrence replay need deployed evidence. |
+| 5. Pagination beyond 50 | tests/airtable.test.js covers bounded, scoped cursors; browser test reaches project/idea 51 and preserves selections across pages. Current synthetic benchmark validates 50-project responses with 1,000 owned projects. | Production account reports another project page, but has not supplied live 51-item UI acceptance evidence. |
+| 6. Storyboard/recovery activity | tests/activity.test.js proves project-owned local STORYBOARD and RECOVERY entries, including failures and reused outputs. Cloud storyboard jobs persist run activity through src/cloud/workflows.js. | The dashboard Recover drafts action now submits the shared script controller with RECOVERY source, persisted by CloudState and preserved on retries. Browser and isolated cloud-state checks cover this path. The new source must be redeployed before live cloud recovery/storyboard activity can be verified; standalone operator recovery retains local state. |
+| 7. Live validation/fallback/load/restart | Prior local live Gemini validation evidence is retained. Refreshed 44 focused tests passed; current synthetic load passed at 321.46 MB peak RSS. Live account verification passed. | Deployed generation, primary/fallback/key behavior and restart/replay remain unverified. Do not intentionally exhaust provider quota to demonstrate rotation. |
+
+Focused check: node --test tests/gemini.test.js tests/auth.test.js tests/activity.test.js tests/scriptWorker.test.js tests/storyboardPipeline.test.js tests/cloud.test.js — 44 passed, zero failed. Evidence: data/goal-focused-audit.log.
+
+Load check: node scripts/benchmark-dashboard.mjs — passed. It used mocked providers and isolated local JSON state, 1,000 owned projects, 1,000 ideas and 500 scripts per project, and 20 concurrent history polls. A 50-project statistics page consumed 750 provider pages / 75,000 rows, with at most 100 rows per page. Peak RSS was 321.46 MB; concurrent history p95 was 898.5 ms. The benchmark ran alongside the focused suite, so latency includes CPU contention. This is neither real provider quota evidence nor a Supabase/Vercel latency measurement. Evidence: data/hardening-benchmark.json.
+
+The one-concept deployed write test is awaiting explicit approval. Until then, do not start generation, change schedules or approve content solely for verification.
+
+## Cloud recovery activity fix — 2026-10-07
+
+The project dashboard now offers Recover drafts, submitting POST /api/projects/:id/recovery-runs with a bounded count through the existing script controller. Owned-project and active-project checks, request throttling, eligible Draft/blank scans, sequential processing, validation and saved-script reuse are inherited from that path. Shared history records SCRIPTS / RECOVERY, and local/cloud retries retain the recovery source. The standalone operator CLI and its activity remain supported.
+
+Regression checks first reproduced the missing recovery endpoint and lost recovery source on retry. Final checks passed: 157 backend tests, six browser workflows, syntax checks for all changed backend files, git diff --check, and npm run test:vercel (including emitted routing/API/workflow-handler checks). Browser coverage exercises the recovery button and visible activity while retaining the standalone recovery alert check. All providers were mocked; no live generation or content writes occurred.
+
+Evidence: data/recovery-suite.log, data/recovery-ui.log and data/recovery-vercel.log. The source is ready for redeployment but was not committed, pushed or deployed by Codex. Deployed live generation and restart/replay acceptance remain open, with the pending one-concept write authorization unchanged.

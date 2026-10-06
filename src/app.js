@@ -257,6 +257,23 @@ export function createApp({
     }
   );
 
+  // Recovery uses the same eligible-idea scan, worker and queue as script generation.
+  app.post(
+    '/api/projects/:id/recovery-runs',
+    validateBody(IdeaRunRequestSchema),
+    async (req, res) => {
+      try {
+        assertProjectActive(await makeAirtable().getProject(req.params.id));
+        const run = await runs.create(
+          { projectId: req.params.id, mode: 'count', count: req.validatedBody.count },
+          { source: 'RECOVERY' },
+        );
+        if (!run) return res.status(503).json({ error: 'Pipeline queue is full' });
+        return res.status(202).json({ run });
+      } catch (err) { return projectError(res, err, 'Recovery run could not be started'); }
+    }
+  );
+
   app.post(
     '/api/script-runs',
     validateBody(ScriptRunRequestSchema),

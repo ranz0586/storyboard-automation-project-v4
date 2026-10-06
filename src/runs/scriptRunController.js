@@ -64,6 +64,7 @@ export class ScriptRunController {
       return this.store.get(prior.recoveredByRunId) || { error: 'NO_FAILED_ITEMS' };
     }
     if (['QUEUED', 'RUNNING'].includes(prior.status)) return { error: 'NO_FAILED_ITEMS' };
+    const options = { source: prior.source === 'RECOVERY' ? 'RECOVERY' : 'MANUAL' };
     const failedIds = prior.items
       .filter((item) => item.status === 'FAILED' && item.ideaId)
       .map((item) => item.ideaId);
@@ -72,7 +73,7 @@ export class ScriptRunController {
       if (prior.selectedIdeaIds.length) {
         const succeeded = new Set(prior.items.filter((item) => item.status === 'SUCCEEDED').map((item) => item.ideaId));
         const pending = prior.selectedIdeaIds.filter((id) => !succeeded.has(id));
-        if (pending.length) replacement = this.create({ projectId: prior.projectId, mode: 'selected', ideaIds: pending });
+        if (pending.length) replacement = this.create({ projectId: prior.projectId, mode: 'selected', ideaIds: pending }, options);
       } else {
         const remaining = Math.max(0, prior.requestedCount - prior.successfulCount);
         if (remaining) replacement = this.create({
@@ -80,7 +81,7 @@ export class ScriptRunController {
           mode: 'count',
           count: remaining,
           preferredIdeaIds: unfinishedIdeaIds(prior).slice(0, remaining),
-        });
+        }, options);
       }
       if (replacement) {
         this.store.update(runId, { recoveredByRunId: replacement.id });
@@ -89,7 +90,7 @@ export class ScriptRunController {
       if (replacement === null) return null;
     }
     if (!failedIds.length) return { error: 'NO_FAILED_ITEMS' };
-    return this.create({ projectId: prior.projectId, mode: 'selected', ideaIds: failedIds });
+    return this.create({ projectId: prior.projectId, mode: 'selected', ideaIds: failedIds }, options);
   }
 
   async #execute(runId) {

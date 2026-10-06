@@ -35,6 +35,8 @@ HTTP endpoints persist queued work and enqueue a Workflow; the request does not 
 
 Weekly schedules have one owning Workflow per configuration generation, unique occurrence records, and durable sleeps until the configured local time. Changing/disabling a schedule retires its previous workflow when it wakes. The daily authenticated `/api/cron` is a recovery backstop, not the weekly timing engine. It is compatible with the daily cron schedule in `vercel.json`. Maintenance reconciles lost dispatches and exposes failed/cancelled jobs as Interrupted.
 
+Use **Recover drafts** in a project to process Draft or blank-status ideas up to the script count entered above. This submits the existing sequential script workflow with source `RECOVERY`, so completion, failures and retries appear in shared dashboard activity. Saved scripts are reused. The standalone `npm run recover-ideas` command continues to use local state; after cloud cutover, use the dashboard action.
+
 Dashboard approval queues a storyboard immediately. Set `STORYBOARD_POLL_MS=900000` to also discover approvals made directly in Airtable every fifteen minutes. Set 0 to disable that discovery. Failed storyboard occurrences can retry on a later poll or repeated approval; persisted usable output is reused.
 
 Gemini cooldowns reduce bursts, but do not guarantee avoiding provider quota limits. YouTube API quotas and Workflow/database usage still apply. Telegram error alerts are attempted once per run; a crash between marking an alert and sending can omit it because Telegram has no idempotency key. An API response lost immediately after a provider accepts work can still incur another provider call before its checkpoint is saved.

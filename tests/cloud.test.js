@@ -38,7 +38,7 @@ test('cloud state survives a new instance, scopes history and preserves retry li
       projectId: 'recProject',
       mode: 'selected',
       ideaIds: ['idea1', 'idea2'],
-    });
+    }, { source: 'RECOVERY' });
     await state.addItem(run.id, { ideaId: 'idea1', status: 'SUCCEEDED' });
     await state.addItem(run.id, { ideaId: 'idea1', status: 'SUCCEEDED' });
     await state.addItem(run.id, { ideaId: 'idea2', status: 'FAILED' });
@@ -49,6 +49,8 @@ test('cloud state survives a new instance, scopes history and preserves retry li
     assert.equal((await fresh.list({ projectIds: ['recProject'] })).length, 1);
     const retry = await fresh.create(null, { retryOf: run.id });
     assert.deepEqual(retry.selectedIdeaIds, ['idea2']);
+    assert.equal(retry.source, 'RECOVERY');
+    assert.equal((await fresh.list({ projectIds: ['recProject'] })).some(run => run.source === 'RECOVERY'), true);
     assert.equal((await state.create(null, { retryOf: run.id })).id, retry.id);
     assert.equal(await state.get('------------------------------------'), null);
   }));

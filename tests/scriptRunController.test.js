@@ -12,13 +12,14 @@ test('interrupted resume is idempotent and does not retry active or non-script r
     canAccept: true, tryEnqueue: () => { queued++; return true; },
   } });
   const prior = store.create({ projectId: 'recProject1', requestedCount: 2,
-    selectedIdeaIds: ['recDone', 'recPending'] });
+    selectedIdeaIds: ['recDone', 'recPending'], source: 'RECOVERY' });
   assert.deepEqual(controller.retry(prior.id), { error: 'NO_FAILED_ITEMS' });
   store.addItem(prior.id, { ideaId: 'recDone', status: 'SUCCEEDED' });
   store.update(prior.id, { status: 'INTERRUPTED', successfulCount: 1,
     processedCount: 1, interruptedItem: 'recPending' });
   const resumed = controller.retry(prior.id);
   assert.deepEqual(resumed.selectedIdeaIds, ['recPending']);
+  assert.equal(resumed.source, 'RECOVERY');
   assert.equal(controller.retry(prior.id).id, resumed.id);
   assert.equal(queued, 1);
   const ideaRun = store.create({ projectId: 'recProject1', requestedCount: 1, type: 'IDEAS' });
