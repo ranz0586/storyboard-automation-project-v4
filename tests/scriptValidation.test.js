@@ -257,3 +257,21 @@ test('operator content pipeline validates before saving and never completes a re
     assert.equal(successAlerts, approved ? 1 : 0); assert.equal(errorAlerts, approved ? 0 : 1);
   }
 });
+
+test('under-length review receives expansion guidance and a pause-aware correction budget', async () => {
+  const short = script([scene(1, 'Tiny bubbles slowly rise inside this chamber.')]);
+  short.scenes[0].tts.pause_after_ms = 100;
+  let calls = 0;
+  const result = await scriptValidationAgent({ generate: async ({ prompt }) => {
+    calls++;
+    assert.match(prompt, /Below min_words: expand/);
+    if (calls === 1) return reply(short);
+    assert.match(prompt, /144.8 WPM/);
+    assert.match(prompt, /"min_words":8,"max_words":8/);
+    const fixed = script([scene(1, 'Watch the tiny bubbles rise inside this chamber.')]);
+    fixed.scenes[0].tts.pause_after_ms = 100;
+    return reply(fixed);
+  } }, { ...context, script: short });
+  assert.equal(calls, 2);
+  assert.equal(inspectScriptTiming(result).issues.length, 0);
+});

@@ -10,6 +10,9 @@ Do not use a generic tone. Read the specific "emotional_angle" provided in the c
 CONCEPT TO PROCESS:
 ${JSON.stringify(concept)}
 
+SCENE NARRATION TIMING:
+Plan pauses before narration. With 100 ms total pauses: use 5 words for 2-second scenes and 8 words for 3-second scenes. With zero pauses, the valid ranges are 5–6 and 8–9 words respectively. Different pauses require recalculating both bounds at 150–180 WPM. Expand narration below the minimum with useful clarity; shorten or split narration above the maximum. Preserve the chosen scene duration. Recount every scene before returning JSON.
+
 Generate:
 Generate a complete JSON object matching the requested Airtable schema, including:
 - Full video metadata, title, and topic

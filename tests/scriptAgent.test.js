@@ -42,3 +42,13 @@ test('scriptAgent rejects scripts without usable narration or scenes', async () 
   };
   await assert.rejects(scriptAgent(gemini, context), /voiceover\.full_script|at least one scene/);
 });
+
+test('script generation receives pause-aware minimum and maximum word budgets', async () => {
+  await scriptAgent({ generate: async ({ system, prompt }) => {
+    assert.doesNotMatch(system, /Target: 4-5 words|Target: 7-8 words/);
+    assert.match(system, /2 seconds, 100 ms total pauses: exactly 5 spoken words/);
+    assert.match(system, /3 seconds, 100 ms total pauses: exactly 8 spoken words/);
+    assert.match(prompt, /100 ms total pauses: use 5 words for 2-second scenes and 8 words for 3-second scenes/);
+    return { scripts: [validScript] };
+  } }, context);
+});

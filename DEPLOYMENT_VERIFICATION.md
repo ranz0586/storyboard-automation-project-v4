@@ -102,3 +102,24 @@ The project dashboard now offers Recover drafts, submitting POST /api/projects/:
 Regression checks first reproduced the missing recovery endpoint and lost recovery source on retry. Final checks passed: 157 backend tests, six browser workflows, syntax checks for all changed backend files, git diff --check, and npm run test:vercel (including emitted routing/API/workflow-handler checks). Browser coverage exercises the recovery button and visible activity while retaining the standalone recovery alert check. All providers were mocked; no live generation or content writes occurred.
 
 Evidence: data/recovery-suite.log, data/recovery-ui.log and data/recovery-vercel.log. The source is ready for redeployment but was not committed, pushed or deployed by Codex. Deployed live generation and restart/replay acceptance remain open, with the pending one-concept write authorization unchanged.
+
+## Authorized deployed one-concept test — 2026-10-07
+
+The owner confirmed the updated source was deployed and explicitly approved the one-concept live test. This supersedes the earlier pending-approval notes. The test ran between approximately 02:16 and 02:24 Asia/Singapore on 2026-10-07, using the dedicated project recQk9DQQODeGqDzy. Cookies/passwords stayed in memory and all test sessions were revoked afterward.
+
+- Idea run 35d1fda7-6e03-484e-b245-2658fa7500be completed through Workflow wrun_41M496XS0Y0GGNAYDZZRX39P3R and saved idea recxnEYTATa1J4XnK.
+- Script run 48eda16a-1c56-40e8-8e89-741ba6f8dfce (Workflow wrun_41M4970F3G0GMJMVZ6AEH95QB7) failed after its bounded review/correction sequence. Four final scenes violated the deterministic 150–180 WPM gate: measured rates were approximately 186.2, 144.8, 103.4 and 124.1 WPM.
+- One retry of the same idea was submitted through the deployed retry API. Run 1daf5bfb-750a-48e9-969e-bd9117efffd0 (Workflow wrun_41M4977DHC0GH3126HJHK8CVN2) also failed timing validation. Its final output included 11 words in 2.9 speaking seconds (227.6 WPM), with several other scenes below 150 WPM.
+- Both attempts' two review responses claimed approved=true. The independent deterministic gate correctly overrode those invalid model verdicts, saving no Script and leaving the Idea eligible for recovery. Review responses were examined from this run's persisted PostgreSQL checkpoints without additional model calls.
+- Final project statistics: 1 idea, 0 scripts, 0 approved scripts, 0 storyboards, 1 recovery item. History retained the successful idea run, both failed script runs and the original run's recoveredByRunId link. No approval or storyboard job was submitted. Configured error alerts may have been sent; Telegram delivery was not independently verified.
+- Google's model-list API confirmed local identifiers gemini-3.8-flash and gemini-3.5-flash-lite both support generateContent for the supplied key. That metadata does not identify which model served the deployed jobs. No deliberate provider rate-limit exhaustion was attempted.
+
+Evidence: data/deployed-one-concept-verification.json and data/deployed-script-response-audit.json. Workflow execution, real content writes, deployed retry linkage and fail-closed live validation are now observed. Successful script/storyboard lifecycle, exact primary/fallback/key attribution, scheduling and forced deployed restart/replay remain unproven. Further generation attempts were stopped after the single bounded retry; product code and validation thresholds were not changed to force a pass.
+
+## Script pacing prompt correction — 2026-10-07
+
+The owner's requested Script Agent pacing section was corrected to match the existing 150–180 WPM gate after pauses. With 100 ms total pauses, a two-second scene requires five spoken words and a three-second scene requires eight. Without pauses the ranges are five–six and eight–nine. The generation prompt repeats these bounds; validation instructions now distinguish expanding below-minimum narration from shortening/splitting above-maximum narration. Scene duration, strict timing acceptance and the two-call review/correction cap are unchanged. Other imported Script system rules are retained; no n8n workflow was edited.
+
+Focused script checks: 27 passed. Full backend rerun: 159 passed. Vercel build/emitted-handler checks passed. An initial suite run concurrent with the build hit the pre-existing localRestart.test.js fixture race (JSON.parse read partially written provider.json); no pacing code caused that fixture read, and the isolated suite passed without altering the test.
+
+Evidence: data/pacing-focused.log, data/pacing-suite.log, data/pacing-suite-isolated.log and data/pacing-vercel.log. The corrected prompts have not yet been deployed or verified with new live generation. No additional provider calls or content writes were made for this prompt fix.
