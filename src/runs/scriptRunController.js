@@ -1,3 +1,5 @@
+import { runContentPipeline } from '../pipeline.js';
+import { formFromProject } from '../ideaGeneration.js';
 import { logger } from '../utils/logger.js';
 import { unflattenIdea } from '../transforms.js';
 import { processIdeaScript } from '../scriptWorker.js';
@@ -39,6 +41,7 @@ export class ScriptRunController {
       source,
       scheduledFor: source === 'SCHEDULED' ? input.scheduledFor : undefined,
     });
+    if (input.mode === 'pipeline') this.store.update(run.id, { fullPipeline: true });
     const accepted = this.queue.tryEnqueue(() => this.#execute(run.id));
     if (!accepted) {
       this.store.update(run.id, {
@@ -48,7 +51,7 @@ export class ScriptRunController {
       });
       return null;
     }
-    return run;
+    return this.store.get(run.id);
   }
 
   retry(runId) {
@@ -68,6 +71,7 @@ export class ScriptRunController {
     const failedIds = prior.items
       .filter((item) => item.status === 'FAILED' && item.ideaId)
       .map((item) => item.ideaId);
+    if (prior.status === 'INTERRUPTED' && prior.fullPipeline && !prior.selectedIdeaIds.length) return { error: 'NO_FAILED_ITEMS' };
     if (prior.status === 'INTERRUPTED') {
       let replacement;
       if (prior.selectedIdeaIds.length) {
@@ -107,7 +111,27 @@ export class ScriptRunController {
       const project = await clients.airtable.getProject(run.projectId);
       assertProjectActive(project);
       clients.gemini = this.makeGemini();
-      if (run.selectedIdeaIds.length) {
+      if (run.fullPipeline) {
+        await runContentPipeline({
+          project, form: formFromProject(project),
+          clients: { ...clients, conceptCount: run.requestedCount },
+          onIdea: idea => {
+            const current = this.store.get(runId);
+            this.store.update(runId, { currentItem: idea.id,
+              selectedIdeaIds: [...new Set([...current.selectedIdeaIds, idea.id])] });
+          },
+          onResult: ({ idea, result, error }) => {
+            const current = this.store.get(runId);
+            this.store.addItem(runId, { ideaId: idea?.id, scriptId: result?.script.id,
+              status: error ? 'FAILED' : 'SUCCEEDED', error: error?.message,
+              generated: result?.generated });
+            this.store.update(runId, { currentItem: null,
+              processedCount: current.processedCount + 1,
+              successfulCount: current.successfulCount + (error ? 0 : 1),
+              failedCount: current.failedCount + (error ? 1 : 0) });
+          },
+        });
+      } else if (run.selectedIdeaIds.length) {
         for (const ideaId of run.selectedIdeaIds) {
           let idea;
           try {
@@ -223,7 +247,7 @@ export class ScriptRunController {
       failedCount,
       completedAt: new Date().toISOString(),
       currentItem: null,
-      error: shortfall ? `Only ${current.processedCount} eligible idea(s) were available` : null,
+      error: shortfall ? (current.fullPipeline ? `Only ${current.processedCount} concept(s) were returned` : `Only ${current.processedCount} eligible idea(s) were available`) : null,
     });
   }
 }

@@ -77,7 +77,10 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   await refresh(page);
   await expect(stat(page, 'Storyboards')).toHaveText('1');
   await expect(page.getByText('STORYBOARD · STORYBOARD_POLL', { exact: true })).toBeVisible();
-  await expect(page.locator('#scripts summary').first()).toContainText('Story Generated');
+  await expect(page.locator('#scripts')).not.toContainText('Story Generated');
+  await expect(page.locator('#storyboards details')).toHaveCount(1);
+  await page.locator('#storyboards summary').click();
+  await expect(page.locator('#storyboards')).toContainText('panel');
 
   const recovery = await (await request.post(`/__test/recovery/${projectId}`)).json();
   expect(recovery.recovered).toBe(1);
@@ -223,3 +226,19 @@ test('project and idea pages reach the fifty-first item and preserve selections 
   await expect(navigation.getByRole('button')).toHaveCount(50);
 });
 
+
+test('manual full pipeline creates ideas and Draft scripts in the selected project', async ({ page, request }) => {
+  await register(page, 'pipeline-user');
+  await createProject(page, 'Manual pipeline project');
+  await page.getByLabel('Pipeline concept count', { exact: true }).fill('1');
+  await page.getByRole('button', { name: 'Run full pipeline', exact: true }).click();
+  await expect(page.locator('#scripts summary')).toContainText('Draft');
+  const persisted = await state(request);
+  const project = persisted.projects.find(row => row.fields.channel_page_name === 'Manual pipeline project');
+  expect(persisted.ideas.filter(row => row.fields.Projects === project.fields.project_id)).toHaveLength(1);
+  const scripts = persisted.scripts.filter(row => row.fields.Projects === project.fields.project_id);
+  expect(scripts).toHaveLength(1);
+  expect(persisted.runs.find(row => row.projectId === project.id).status).toBe('COMPLETED');
+  expect(persisted.storyboards.filter(row => row.fields.script_id?.includes(scripts[0].id))).toHaveLength(0);
+  await expect(page.getByText('FULL PIPELINE · MANUAL', { exact: true })).toBeVisible();
+});

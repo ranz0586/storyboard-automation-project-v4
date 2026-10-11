@@ -384,10 +384,10 @@ export class AirtableClient {
     return normalizeRecord({ id: record.id, fields: record.fields });
   }
 
-  async listScriptsForProject(projectId, { limit = 25, offset } = {}) {
+  async listScriptsForProject(projectId, { limit = 25, offset, status } = {}) {
     const key = projectKey(await this.getProject(projectId));
     const params = new URLSearchParams({
-      filterByFormula: `{Projects} = ${escapeFormulaValue(key)}`,
+      filterByFormula: `AND({Projects} = ${escapeFormulaValue(key)},${status ? `{status} = ${escapeFormulaValue(status)}` : "{status} != 'Story Generated'"})`,
       pageSize: String(Math.max(1, Math.min(Number(limit) || 25, 50))),
     });
     if (offset) params.set('offset', offset);

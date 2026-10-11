@@ -2,7 +2,7 @@
 
 Dashboard-controlled, memory-efficient Node.js implementation of the n8n workflow **Video Script Generation Flow Agentic v4** (`Zl1MpttLGWdWFqRU`).
 
-The dashboard at `/` is the primary control plane. It supports explicit Airtable projects, project statistics, idea generation, count-based and selected-idea script runs, live progress, safe failure retry, and weekly schedules. The implicit-project `/niche` endpoint is retired (410).
+The dashboard at `/` is the primary control plane. It supports explicit Airtable projects, project statistics, manual full-pipeline runs, separate idea and script generation, live progress, safe failure retry, and weekly schedules. Run full pipeline researches the selected project, saves new ideas, and generates validated Draft scripts one at a time. Weekly schedules process existing eligible ideas. Completed scripts appear under Generated storyboards rather than Review and approve scripts. The implicit-project `/niche` endpoint is retired (410).
 
 It reproduces the `NicheForm` branch as a plain Node service:
 
@@ -117,7 +117,7 @@ Sessions use opaque HttpOnly, SameSite=Strict cookies; HTTPS production cookies 
 
 Authentication endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Send JSON and `X-Dashboard-Request: 1` on writes; the browser sends the session cookie automatically. No password hashes are returned to the browser.
 
-The implicit-project `POST /niche` endpoint now returns 410 for logged-in users. Use project-bound idea runs and script runs in the dashboard. The one-shot CLI pipeline remains available for operator use.
+The implicit-project `POST /niche` endpoint now returns 410 for logged-in users. Use the project-bound Run full pipeline action, idea runs, or script runs in the dashboard. Vercel runs the full pipeline through its durable workflow with provider checkpoints and cooldown sleeps. Interrupted runs can resume their saved unfinished ideas without repeating research; request another full run for concepts that had not yet been saved. The one-shot CLI pipeline remains available for operator use.
 
 ## Layout
 

@@ -315,11 +315,14 @@ test('script review fetches one scoped page, preserves the cursor and normalizes
     },
   });
   const page = await client.listScriptsForProject('recProject', { limit: 10, offset: 'opaque cursor' });
-  assert.equal(requested.searchParams.get('filterByFormula'), '{Projects} = "Parenting_Facebook"');
+  assert.equal(requested.searchParams.get('filterByFormula'), `AND({Projects} = "Parenting_Facebook",{status} != 'Story Generated')`);
   assert.equal(requested.searchParams.get('pageSize'), '10');
   assert.equal(requested.searchParams.get('offset'), 'opaque cursor');
   assert.equal(page.scripts[0].fields.video_id, 'video1');
   assert.equal(page.nextOffset, 'next');
+  await client.listScriptsForProject('recProject', { status: 'Story Generated', offset: 'done cursor' });
+  assert.equal(requested.searchParams.get('filterByFormula'), 'AND({Projects} = "Parenting_Facebook",{status} = "Story Generated")');
+  assert.equal(requested.searchParams.get('offset'), 'done cursor');
 });
 
 test('status updates retain Airtable typecast and change only the requested field', async () => {

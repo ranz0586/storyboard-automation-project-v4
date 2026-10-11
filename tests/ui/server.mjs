@@ -79,8 +79,8 @@ const client = {
   },
   getScript: async id => copy(byId(scripts, id)),
   updateScript: async (id, fields) => { const record = byId(scripts, id); Object.assign(record.fields, fields); return copy(record); },
-  listScriptsForProject: async (id, { offset }) => {
-    const rows = scripts.filter(script => script.fields.Projects === byId(projects, id).fields.project_id);
+  listScriptsForProject: async (id, { offset, status }) => {
+    const rows = scripts.filter(script => script.fields.Projects === byId(projects, id).fields.project_id && (status ? script.fields.status === status : script.fields.status !== 'Story Generated'));
     // Two rows per fixture page makes cursor navigation observable.
     const start = Number(offset || 0);
     return { scripts: copy(rows.slice(start, start + 2)), nextOffset: start + 2 < rows.length ? String(start + 2) : null };

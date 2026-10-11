@@ -222,3 +222,17 @@ test('conflicting runs for the same idea complete without duplicate generation',
   assert.equal(fx.scripts.size, 1);
   assert.equal(fx.peak(), 1);
 });
+
+test('interrupted full pipelines resume only their own saved ideas without repeating research', () => {
+  const store = new RunStore();
+  const controller = new ScriptRunController({ store, queue: { canAccept: true, tryEnqueue: () => true } });
+  const prior = store.create({ projectId: 'recProject1', requestedCount: 3 });
+  store.update(prior.id, { fullPipeline: true, status: 'INTERRUPTED' });
+  assert.deepEqual(controller.retry(prior.id), { error: 'NO_FAILED_ITEMS' });
+  store.update(prior.id, { selectedIdeaIds: ['recDone', 'recPending'], successfulCount: 1 });
+  store.addItem(prior.id, { ideaId: 'recDone', status: 'SUCCEEDED' });
+  const replacement = controller.retry(prior.id);
+  assert.deepEqual(replacement.selectedIdeaIds, ['recPending']);
+  assert.equal(replacement.fullPipeline, undefined);
+  assert.equal(controller.retry(prior.id).id, replacement.id);
+});

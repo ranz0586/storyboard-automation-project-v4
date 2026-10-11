@@ -79,10 +79,10 @@ function Runs({ runs, retry, busy }) {
     const failed = (run.items || []).filter(item => item.status === 'FAILED' || item.status === 'INTERRUPTED');
     const interrupted = run.status === 'INTERRUPTED' && (run.type || 'SCRIPTS') === 'SCRIPTS';
     const retryable = (run.type || 'SCRIPTS') === 'SCRIPTS' && !run.recoveredByRunId && (interrupted
-      ? run.successfulCount < run.requestedCount
-      : !['QUEUED', 'RUNNING'].includes(run.status) && failed.length > 0);
+      ? run.successfulCount < run.requestedCount && (!run.fullPipeline || run.selectedIdeaIds?.length > run.successfulCount)
+      : !['QUEUED', 'RUNNING'].includes(run.status) && failed.some(item => item.ideaId));
     const percent = Math.min(100, Math.round(run.processedCount / Math.max(1, run.requestedCount) * 100));
-    return <div className="run" key={run.id}><div className="run-head"><b>{run.type || 'SCRIPTS'} · {run.source}</b><span className={`badge ${run.status}`}>{run.status}</span></div>
+    return <div className="run" key={run.id}><div className="run-head"><b>{run.fullPipeline ? 'FULL PIPELINE' : run.type || 'SCRIPTS'} · {run.source}</b><span className={`badge ${run.status}`}>{run.status}</span></div>
       <div className="progress" role="progressbar" aria-label="Run progress" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${percent}%` }} /></div>
       <div className="muted">{run.processedCount}/{run.requestedCount} processed · {run.successfulCount} successful · {run.failedCount} failed</div>
       {run.error && <div className="error">{run.error}</div>}
@@ -108,6 +108,13 @@ function ProjectDetail({ id, api, notice, projectsChanged }) {
   const [schedule, setSchedule] = useState(defaults);
   const [status, setStatus] = useState('Active');
   const [ideaCount, setIdeaCount] = useState(10);
+  const [pipelineCount, setPipelineCount] = useState(10);
+  const [storyboards, setStoryboards] = useState([]);
+  const [storyPage, setStoryPage] = useState(firstPage);
+  const storyPageState = useRef(firstPage());
+  const storyVersion = useRef(0);
+  const [storiesLoading, setStoriesLoading] = useState(false);
+  const [storiesError, setStoriesError] = useState('');
   const [scriptCount, setScriptCount] = useState(10);
   const [scripts, setScripts] = useState([]);
   const [page, setPage] = useState({ offset: null, next: null, previous: [] });
@@ -167,8 +174,22 @@ function ProjectDetail({ id, api, notice, projectsChanged }) {
     } catch (err) { if (version === scriptVersion.current && err.name !== 'AbortError') setScriptsError(err.message); throw err; }
     finally { if (version === scriptVersion.current) setScriptsLoading(false); }
   }
+  async function loadStoryboards(nextPage = storyPageState.current) {
+    const version = ++storyVersion.current;
+    setStoriesLoading(true); setStoriesError('');
+    try {
+      const query = new URLSearchParams({ limit: '10' });
+      if (nextPage.offset) query.set('offset', nextPage.offset);
+      const data = await read(`${base}/storyboards?${query}`);
+      if (version !== storyVersion.current) return;
+      setStoryboards(data.storyboards);
+      storyPageState.current = { ...nextPage, next: data.nextOffset };
+      setStoryPage(storyPageState.current);
+    } catch (err) { if (version === storyVersion.current && err.name !== 'AbortError') setStoriesError(err.message); throw err; }
+    finally { if (version === storyVersion.current) setStoriesLoading(false); }
+  }
   async function refresh() {
-    await Promise.all([loadProject(), loadIdeas(), loadRuns(), loadSchedule(), loadScripts()]);
+    await Promise.all([loadProject(), loadIdeas(), loadRuns(), loadSchedule(), loadScripts(), loadStoryboards()]);
   }
   useEffect(() => {
     controller.current = new AbortController();
@@ -180,12 +201,12 @@ function ProjectDetail({ id, api, notice, projectsChanged }) {
       try {
         const latest = await loadRuns();
         const state = latest.map(run => `${run.id}:${run.status}`).join(',');
-        if (state !== lastRunState) await Promise.all([loadProject(), loadIdeas(), loadScripts()]);
+        if (state !== lastRunState) await Promise.all([loadProject(), loadIdeas(), loadScripts(), loadStoryboards()]);
         lastRunState = state; warned = false;
       } catch (err) { if (err.name !== 'AbortError' && !warned) { notice(`Activity refresh failed: ${err.message}`, 'error'); warned = true; } }
       finally { polling = false; }
     }, 3000);
-    return () => { clearInterval(timer); controller.current.abort(); ++scriptVersion.current; };
+    return () => { clearInterval(timer); controller.current.abort(); ++scriptVersion.current; ++storyVersion.current; };
   }, [id]);
 
   async function action(fn) {
@@ -211,13 +232,14 @@ function ProjectDetail({ id, api, notice, projectsChanged }) {
         <label htmlFor="projectStatus">Project status</label><select id="projectStatus" value={status} onChange={e => setStatus(e.target.value)}><option>Active</option><option>Inactive</option></select><button className="secondary" disabled={busy}>Save status</button>
       </form><p className="muted">Setting a project inactive blocks new runs and disables the weekly schedule. Work already running may finish. After reactivating, enable the schedule when ready.</p>
     </div>
+    <div className="card" style={{ marginTop: 16 }}><h3>Run full pipeline manually</h3><p>Research this project, generate new ideas, then generate and validate one script at a time. Scripts stay Draft until you approve them.</p><form className="actions" onSubmit={event => { event.preventDefault(); action(async () => { const { run } = await api(`${base}/pipeline-runs`, { count: Number(pipelineCount) }); notice(`Full pipeline ${run.id.slice(0, 8)} queued`, 'success'); await loadRuns(); }); }}><input aria-label="Pipeline concept count" type="number" min="1" max="50" required value={pipelineCount} onChange={e => setPipelineCount(e.target.value)} /><button className="primary" disabled={generationDisabled}>Run full pipeline</button></form></div>
     <div className="grid two" style={{ marginTop: 16 }}>
       <div className="card"><h3>1. Generate ideas</h3><p>Research this project and save ranked ideas without generating scripts yet.</p><form className="actions" onSubmit={event => { event.preventDefault(); action(async () => { const { run } = await api(`${base}/idea-runs`, { count: Number(ideaCount) }); notice(`Idea run ${run.id.slice(0, 8)} queued`, 'success'); await loadRuns(); }); }}><input aria-label="Idea count" type="number" min="1" max="50" required value={ideaCount} onChange={e => setIdeaCount(e.target.value)} /><button className="primary" disabled={generationDisabled}>Generate ideas</button></form></div>
       <div className="card"><h3>2. Generate scripts</h3><p>Eligible ideas are processed one at a time.</p><form className="actions" onSubmit={event => { event.preventDefault(); action(() => createRun({ mode: 'count', count: Number(scriptCount) })); }}><input aria-label="Script count" type="number" min="1" max="50" required value={scriptCount} onChange={e => setScriptCount(e.target.value)} /><button className="primary" disabled={generationDisabled}>Generate by count</button><button className="secondary" type="button" disabled={generationDisabled} onClick={() => selected.length ? action(() => createRun({ mode: 'selected', ideaIds: selected })) : notice('Select at least one idea', 'error')}>Generate selected</button><button className="secondary" type="button" disabled={generationDisabled} onClick={() => action(async () => { const { run } = await api(`${base}/recovery-runs`, { count: Number(scriptCount) }); notice(`Recovery ${run.id.slice(0, 8)} queued`, 'success'); await loadRuns(); })}>Recover drafts</button></form><p className="muted">Recover drafts processes Draft or blank-status ideas up to the script count above, reusing saved scripts.</p></div>
     </div>
     <div className="grid two" style={{ marginTop: 16 }}>
       <div className="card"><div className="actions" style={{ justifyContent: 'space-between' }}><h3>Eligible ideas</h3><button className="secondary" disabled={busy} onClick={() => action(() => loadIdeas(firstPage()))}>Reload ideas</button></div><div className="ideas" id="ideas">{ideas.length ? ideas.map(idea => <label className="idea" key={idea.id}><input type="checkbox" checked={selected.includes(idea.id)} disabled={ideasLoading || (!selected.includes(idea.id) && selected.length >= 50)} onChange={e => setSelected(old => e.target.checked ? (old.length < 50 && !old.includes(idea.id) ? [...old, idea.id] : old) : old.filter(id => id !== idea.id))} /><span><b>{idea.fields.title || 'Untitled idea'}</b><br /><small>{idea.fields.topic || idea.fields.emotional_angle || ''}</small></span><span className="score">{idea.fields.content_score || ''}</span></label>) : <p className="muted">No eligible Draft ideas. Generate ideas or refresh the project.</p>}</div><p className="muted">{selected.length} selected across pages (maximum 50)</p><button className="secondary" disabled={!selected.length || busy} onClick={() => setSelected([])}>Clear selection</button><Pager page={ideaPage} load={next => action(() => loadIdeas(next))} disabled={busy || ideasLoading} kind="ideas" /></div>
-      <div className="card"><h3>Weekly schedule</h3><form id="scheduleForm" onSubmit={event => { event.preventDefault(); action(async () => { await api(`${base}/schedule`, { enabled: schedule.enabled, dayOfWeek: Number(schedule.dayOfWeek), time: schedule.time, scriptCount: Number(schedule.scriptCount) }, 'PUT'); notice('Schedule saved', 'success'); }); }}><div className="grid two">
+      <div className="card"><h3>Weekly schedule</h3><p>Generate scripts from existing eligible ideas at the chosen weekly time.</p><form id="scheduleForm" onSubmit={event => { event.preventDefault(); action(async () => { await api(`${base}/schedule`, { enabled: schedule.enabled, dayOfWeek: Number(schedule.dayOfWeek), time: schedule.time, scriptCount: Number(schedule.scriptCount) }, 'PUT'); notice('Schedule saved', 'success'); }); }}><div className="grid two">
         <div className="field"><label htmlFor="scheduleEnabled">Status</label><select id="scheduleEnabled" value={String(schedule.enabled)} onChange={e => setSchedule({ ...schedule, enabled: e.target.value === 'true' })}><option value="false">Disabled</option><option value="true" disabled={!active}>Enabled</option></select></div>
         <div className="field"><label htmlFor="scheduleDay">Day</label><select id="scheduleDay" value={schedule.dayOfWeek} onChange={e => setSchedule({ ...schedule, dayOfWeek: Number(e.target.value) })}>{['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, i) => <option key={day} value={i}>{day}</option>)}</select></div>
         <Field label="Time" id="scheduleTime" type="time" required value={schedule.time} onChange={e => setSchedule({ ...schedule, time: e.target.value })} />
@@ -227,6 +249,10 @@ function ProjectDetail({ id, api, notice, projectsChanged }) {
     <div className="card" style={{ marginTop: 16 }}><div className="actions" style={{ justifyContent: 'space-between' }}><h3>3. Review and approve scripts</h3><button className="secondary" disabled={busy || scriptsLoading} onClick={() => action(() => loadScripts())}>Refresh scripts</button></div><p>Review the narration and scenes before approving a Draft. Approved scripts are picked up by storyboard polling when it is enabled, or by the storyboard command.</p>
       <div id="scripts" aria-live="polite">{scriptsError && <p className="error" role="alert">{scriptsError}</p>}{scriptsLoading && <p className="muted">Loading scripts…</p>}{scripts.map(script => <details className="run" key={script.id}><summary><b>{script.fields.title || 'Untitled script'}</b> · {script.fields.status || 'Unknown'}</summary><h4>Narration</h4><pre>{script.fields.voiceover_script || 'No narration'}</pre><h4>Scenes</h4><pre>{script.fields.scenes_json || 'No scenes'}</pre>{script.fields.status === 'Draft' && active && <button className="primary" disabled={busy} onClick={() => action(async () => { await api(`${base}/scripts/${encodeURIComponent(script.id)}/approve`); await Promise.all([loadProject(), loadScripts()]); notice('Script approved for storyboard generation', 'success'); })}>Approve for storyboard</button>}</details>)}{!scripts.length && !scriptsLoading && !scriptsError && <p className="muted">No scripts for this project yet.</p>}</div>
       <div className="actions"><button className="secondary" disabled={scriptsLoading || !page.previous.length} onClick={() => action(() => loadScripts({ offset: page.previous.at(-1), previous: page.previous.slice(0, -1) }))}>Previous</button><button className="secondary" disabled={scriptsLoading || !page.next} onClick={() => action(() => loadScripts({ offset: page.next, previous: [...page.previous, page.offset] }))}>Next</button></div>
+    </div>
+    <div className="card" style={{ marginTop: 16 }}><div className="actions" style={{ justifyContent: 'space-between' }}><h3>4. Generated storyboards</h3><button className="secondary" disabled={busy || storiesLoading} onClick={() => action(() => loadStoryboards())}>Refresh storyboards</button></div>
+      <div id="storyboards" aria-live="polite">{storiesError && <p className="error" role="alert">{storiesError}</p>}{storiesLoading && <p className="muted">Loading storyboards…</p>}{storyboards.map(({ script, storyboard }) => <details className="run" key={script.id}><summary><b>{script.fields.title || 'Untitled script'}</b> · Story Generated</summary>{storyboard ? <><h4>Storyboard</h4><pre>{storyboard.fields.storyboard_text || 'No storyboard text'}</pre>{['character_sheet_prompt', 'location_sheet_prompt', 'thumbnail_prompt', 'panel1_prompt', 'panel2_prompt', 'panel3_prompt'].filter(key => storyboard.fields[key]).map(key => <div key={key}><h4>{key.replaceAll('_', ' ')}</h4><pre>{storyboard.fields[key]}</pre></div>)}</> : <p className="error">Saved storyboard is missing. Refresh or check the Airtable record.</p>}</details>)}{!storyboards.length && !storiesLoading && !storiesError && <p className="muted">No generated storyboards for this project yet.</p>}</div>
+      <Pager page={storyPage} load={next => action(() => loadStoryboards(next))} disabled={busy || storiesLoading} kind="storyboards" />
     </div>
     <div className="card" style={{ marginTop: 16 }}><div className="actions" style={{ justifyContent: 'space-between' }}><h3>Recent activity</h3><button className="secondary" disabled={busy} onClick={() => action(loadRuns)}>Refresh activity</button></div><Runs runs={runs} busy={generationDisabled} retry={runId => action(async () => { const { run } = await api(`/api/script-runs/${encodeURIComponent(runId)}/retry`); notice(`Retry ${run.id.slice(0, 8)} queued`, 'success'); await loadRuns(); })} /></div>
   </section>;

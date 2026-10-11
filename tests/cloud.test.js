@@ -353,3 +353,63 @@ test('Supabase runtime tables deny Data API roles while server transactions stil
     const run = await state.create({ projectId: 'p', mode: 'count', count: 1 });
     assert.ok(run.id);
   }));
+
+test('manual cloud pipeline waits through cooldowns, processes only its new ideas and retries failed scripts', () =>
+  fixture(async (_db, state) => {
+    // Exercise the uncompiled workflow/step bodies with fake runtime hooks.
+    // The Vercel build separately verifies their compilation and routing.
+    const source = (await readFile(new URL('../src/cloud/workflows.js', import.meta.url), 'utf8'))
+      .replace(/^import .*;\r?\n/gm, '').replaceAll('export async function', 'async function');
+    const project = { id: 'recProject', fields: { project_id: 'science' } };
+    const c = { airtable: {
+      getProject: async () => project,
+      getIdea: async id => ({ id, fields: { Projects: 'science' } }),
+      forEachEligibleIdea: async () => assert.fail('Full pipeline must not consume unrelated ideas'),
+      updateIdea: async () => {},
+    }, telegram: { errorAlert: async () => {} } };
+    let research = 0, sleeps = 0, cooling = true, processedAtSave;
+    const attempts = [];
+    const dependencies = {
+      cloudContext: () => ({ state, clients: () => c, withSlot: work => work(), withLock: (_id, work) => work() }),
+      getWorkflowMetadata: () => ({ workflowRunId: 'actor' }),
+      sleep: async () => { sleeps++; },
+      generateIdeasForProject: async ({ onSaved }) => {
+        research++;
+        await onSaved({ idea: { id: 'new1' } });
+        processedAtSave = (await state.get(run.id)).processedCount;
+        if (research === 1) throw Object.assign(new Error('cooldown'), { code: 'DEFERRED', retryAt: Date.now() });
+        await onSaved({ idea: { id: 'new2' } });
+      },
+      processIdeaScript: async ({ idea }) => {
+        attempts.push(idea.id);
+        if (idea.id === 'new1' && cooling) {
+          cooling = false;
+          throw Object.assign(new Error('cooldown'), { code: 'DEFERRED', retryAt: Date.now() });
+        }
+        if (idea.id === 'new2') throw new Error('Provider outage');
+        return { script: { id: 'script1' }, generated: true };
+      },
+      formFromProject: () => ({}), unflattenIdea: () => ({}),
+      assertProjectActive: () => {}, belongsToProject: () => true, projectKey: () => 'science',
+      safeTelegram: async (_name, fn) => fn(), logger: { mem: () => {} },
+    };
+    const workflow = new Function(...Object.keys(dependencies), source + '\nreturn contentRunWorkflow;')(...Object.values(dependencies));
+    const run = await state.create({ projectId: project.id, mode: 'pipeline', count: 2 });
+    assert.equal(run.fullPipeline, true);
+    await workflow(run.id);
+    const completed = await state.get(run.id);
+    assert.equal(processedAtSave, 0, 'Saving an idea must not count as completing its script');
+    assert.equal(sleeps, 2);
+    assert.deepEqual(attempts, ['new1', 'new1', 'new2']);
+    assert.deepEqual(completed.selectedIdeaIds, ['new1', 'new2']);
+    assert.equal(completed.status, 'PARTIAL');
+    assert.equal(completed.successfulCount, 1);
+    assert.equal(completed.failedCount, 1);
+    const retry = await state.create(null, { retryOf: run.id });
+    assert.deepEqual(retry.selectedIdeaIds, ['new2']);
+    assert.equal(retry.fullPipeline, false);
+    assert.equal((await state.create(null, { retryOf: run.id })).id, retry.id);
+    const early = await state.create({ projectId: project.id, mode: 'pipeline', count: 1 });
+    await state.update(early.id, { status: 'INTERRUPTED' });
+    assert.deepEqual(await state.create(null, { retryOf: early.id }), { error: 'NO_FAILED_ITEMS' });
+  }));

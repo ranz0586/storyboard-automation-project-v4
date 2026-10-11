@@ -171,7 +171,7 @@ export function flattenScript(script, { form, projectKey, scriptId }) {
 // (keyed on the script's video_id — one storyboard per script); (2) null
 // guards on structure3[0/1/2] so a short structure3 array doesn't throw.
 // Column names follow the current table mapping (panel1_prompt, duration).
-export function flattenStoryboard(sbOutput, scriptRecord) {
+export function flattenStoryboard(sbOutput, scriptRecord, projectRecord) {
   const sb = sbOutput || {};
   const ma = sb.master_assets || {};
   const s3 = Array.isArray(sb.structure3) ? sb.structure3 : [];
@@ -180,8 +180,10 @@ export function flattenStoryboard(sbOutput, scriptRecord) {
   const fields = {
     // Added (not in n8n): upsert key so reruns update rather than duplicate.
     storyboard_id: f.video_id || '',
-    // Relationship — Airtable linked record field requires an array.
-    script_id: scriptRecord?.id ? [scriptRecord.id] : [],
+    // Identity text and linked-record fields have separate Airtable types.
+    script_id: scriptRecord?.id || '',
+    Scripts: scriptRecord?.id ? [scriptRecord.id] : [],
+    ...(projectRecord?.id ? { Projects: [projectRecord.id], project_id: projectRecord.fields.project_id } : {}),
 
     storyboard_status: 'Generated',
     storyboard_text: JSON.stringify(sbOutput || {}),
@@ -205,7 +207,7 @@ export function flattenStoryboard(sbOutput, scriptRecord) {
 
   // ~12 content-bearing fields (storyboard_id/script_id excluded — they come
   // from the script record, not the agent). More than 6 empty means thin output.
-  const { storyboard_id: _id, script_id: _sid, ...warnFields } = fields;
+  const { storyboard_id: _id, script_id: _sid, Scripts: _scripts, Projects: _projects, project_id: _project, ...warnFields } = fields;
   warnIfMostlyEmpty('Storyboard', fields.storyboard_id || f.title, warnFields, 6);
   return fields;
 }

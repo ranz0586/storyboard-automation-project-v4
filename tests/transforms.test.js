@@ -51,3 +51,11 @@ test('flattenStoryboard safely handles an omitted or short structure3 array', ()
   assert.equal(short.panel2_prompt, '');
   assert.equal(short.panel3_prompt, '');
 });
+
+test('storyboard identities use text IDs and separate linked-record fields', () => {
+  const fields = flattenStoryboard({}, scriptRecord, { id: 'recProject1', fields: { project_id: 'science' } });
+  assert.equal(fields.script_id, 'recScript1');
+  assert.deepEqual(fields.Scripts, ['recScript1']);
+  assert.deepEqual(fields.Projects, ['recProject1']);
+  assert.equal(fields.project_id, 'science');
+});

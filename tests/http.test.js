@@ -246,3 +246,52 @@ test('recovery API is scoped, bounded and uses the shared script controller', as
       options: { source: 'RECOVERY' } }]);
   });
 });
+
+test('full pipeline and storyboard routes enforce project ownership, validation and saved relationships', async () => {
+  let status = 'Active', full = false;
+  const inputs = [], pages = [];
+  const client = {
+    getProject: async id => ({ id, fields: { status } }),
+    listScriptsForProject: async (id, options) => {
+      pages.push({ id, options });
+      return { scripts: [{ id: 'script1', fields: { video_id: 'video1' } }], nextOffset: 'next-story-page' };
+    },
+    findStoryboardById: async () => ({ id: 'board1', fields: { script_id: ['script1'], storyboard_text: 'Saved panels' } }),
+  };
+  const app = testApp({ makeAirtable: () => client, scriptRunController: {
+    create: input => { inputs.push(input); return full ? null : { id: 'run1' }; },
+  } });
+  await withServer(app, async base => {
+    const headers = { 'content-type': 'application/json', ...await login(base) };
+    const post = (id, count) => fetch(base + '/api/projects/' + id + '/pipeline-runs',
+      { method: 'POST', headers, body: JSON.stringify({ count }) });
+    assert.equal((await post('otherProject', 1)).status, 404);
+    assert.equal((await post('recProject1', 0)).status, 400);
+    assert.equal((await post('recProject1', 2)).status, 202);
+    assert.deepEqual(inputs[0], { projectId: 'recProject1', mode: 'pipeline', count: 2 });
+    status = 'Inactive';
+    assert.equal((await post('recProject1', 1)).status, 409);
+    assert.equal(inputs.length, 1);
+    status = 'Active'; full = true;
+    assert.equal((await post('recProject1', 1)).status, 503);
+    assert.equal((await fetch(base + '/api/projects/otherProject/storyboards', { headers })).status, 404);
+    assert.equal(pages.length, 0);
+    const page = await (await fetch(base + '/api/projects/recProject1/storyboards?limit=2&offset=cursor', { headers })).json();
+    assert.equal(page.storyboards[0].storyboard.fields.storyboard_text, 'Saved panels');
+    assert.equal(page.nextOffset, 'next-story-page');
+    assert.deepEqual(pages[0], { id: 'recProject1', options: { limit: 2, offset: 'cursor', status: 'Story Generated' } });
+
+    for (const fields of [
+      { script_id: 'script1' },
+      { script_id: '[ "script1" ]' },
+      { script_id: 'script1', Scripts: ['script1'] },
+    ]) {
+      client.findStoryboardById = async () => ({ id: 'textBoard', fields });
+      const compatible = await (await fetch(base + '/api/projects/recProject1/storyboards', { headers })).json();
+      assert.equal(compatible.storyboards[0].storyboard.id, 'textBoard');
+    }
+    client.findStoryboardById = async () => ({ id: 'wrongBoard', fields: { script_id: ['anotherScript'], storyboard_text: 'Private content' } });
+    const mismatched = await (await fetch(base + '/api/projects/recProject1/storyboards', { headers })).json();
+    assert.equal(mismatched.storyboards[0].storyboard, null);
+  });
+});

@@ -77,6 +77,8 @@ export class CloudState {
         source = prior.source === 'RECOVERY' ? 'RECOVERY' : source;
         if (prior.type !== 'SCRIPTS' || ['QUEUED', 'RUNNING'].includes(prior.status))
           return { error: 'NO_FAILED_ITEMS' };
+        if (prior.status === 'INTERRUPTED' && prior.fullPipeline && !prior.selectedIdeaIds?.length)
+          return { error: 'NO_FAILED_ITEMS' };
         const success = new Set(
           prior.items.filter((v) => v.status === 'SUCCEEDED').map((v) => v.ideaId),
         );
@@ -159,6 +161,7 @@ export class CloudState {
         projectId: input.projectId,
         type,
         source,
+        fullPipeline: input.mode === 'pipeline',
         scheduledFor: occurrence,
         requestedCount: input.mode === 'selected' ? input.ideaIds.length : input.count,
         selectedIdeaIds: input.mode === 'selected' ? input.ideaIds : [],

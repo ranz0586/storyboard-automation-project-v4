@@ -32,7 +32,7 @@ export async function processScriptStoryboard({ scriptRecord, clients, onStart, 
       const output = assertUsableStoryboard(await storyboardAgent(gemini, {
         scriptRecord: script, projectRecord: project,
       }));
-      saved = await airtable.upsertStoryboard(flattenStoryboard(output, script));
+      saved = await airtable.upsertStoryboard(flattenStoryboard(output, script, project));
       generated = true;
     }
     await airtable.updateScript(script.id, { status: 'Story Generated' });

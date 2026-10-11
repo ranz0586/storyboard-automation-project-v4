@@ -31,7 +31,7 @@ export async function generateIdeasForProject({ project, count, gemini, airtable
   logger.mem('idea-run:after:idea');
 
   let savedCount = 0;
-  for (let index = 0; index < concepts.length; index += 1) {
+  for (let index = 0; index < Math.min(concepts.length, count); index += 1) {
     const concept = concepts[index];
     const idea = await airtable.upsertIdea({
       ...flattenConcept(concept, { form, projectKey: projectKey(project) }),

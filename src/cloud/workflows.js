@@ -18,14 +18,17 @@ export async function contentRunWorkflow(id) {
   try {
     const plan = await prepareRun(id, actor);
     if (!plan) return;
-    if (plan.type === 'IDEAS') {
+    let ids = plan.ids;
+    if (plan.type === 'IDEAS' || plan.fullPipeline) {
       let value = await executeIdeas(id);
       while (value?.deferredUntil) {
         await sleep(new Date(value.deferredUntil));
         value = await executeIdeas(id);
       }
-    } else
-      for (const itemId of plan.ids) {
+      if (plan.fullPipeline) ids = value.ids || [];
+    }
+    if (plan.type !== 'IDEAS')
+      for (const itemId of ids) {
         let value = await executeItem(id, itemId, plan.type);
         while (value?.deferredUntil) {
           await sleep(new Date(value.deferredUntil));
@@ -61,13 +64,13 @@ async function prepareRun(id, actor) {
     const project = await client.getProject(run.projectId);
     assertProjectActive(project);
     const ids = [...run.selectedIdeaIds];
-    if (run.type === 'SCRIPTS' && !ids.length) {
+    if (run.type === 'SCRIPTS' && !run.fullPipeline && !ids.length) {
       ids.push(...run.preferredIdeaIds);
       await client.forEachEligibleIdea(run.projectId, { limit: 50 }, (idea) => {
         if (ids.length < run.requestedCount && !ids.includes(idea.id)) ids.push(idea.id);
       });
     }
-    const plan = { type: run.type, ids: ids.slice(0, run.requestedCount) };
+    const plan = { type: run.type, ids: ids.slice(0, run.requestedCount), fullPipeline: !!run.fullPipeline };
     await state.update(id, { status: 'RUNNING', startedAt: new Date().toISOString(), plan });
     return plan;
   } catch (error) {
@@ -94,15 +97,19 @@ async function executeIdeas(id) {
         count: run.requestedCount,
         ...c,
         onSaved: async ({ idea }) => {
-          await state.addItem(id, { ideaId: idea.id, status: 'SUCCEEDED' });
+          if (run.fullPipeline) {
+            await state.change(id, current => {
+              if (!current.selectedIdeaIds.includes(idea.id)) current.selectedIdeaIds.push(idea.id);
+            });
+          } else await state.addItem(id, { ideaId: idea.id, status: 'SUCCEEDED' });
         },
       });
-      return {};
+      return { ids: (await state.get(id)).selectedIdeaIds };
     });
   } catch (error) {
     if (error.code === 'DEFERRED') return { deferredUntil: error.retryAt };
-    await state.update(id, { error: String(error.message).slice(0, 1000) });
-    return {};
+    const current = await state.update(id, { error: String(error.message).slice(0, 1000) });
+    return { ids: current.selectedIdeaIds };
   }
 }
 async function executeItem(id, itemId, type) {

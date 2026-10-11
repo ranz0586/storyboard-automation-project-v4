@@ -203,6 +203,30 @@ export function createApp({
     }
   });
 
+  app.get('/api/projects/:id/storyboards', async (req, res) => {
+    const parsed = ScriptPageSchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid storyboard page request' });
+    try {
+      const client = makeAirtable();
+      const page = await client.listScriptsForProject(req.params.id, { ...parsed.data, status: 'Story Generated' });
+      const storyboards = [];
+      for (const script of page.scripts) {
+        const storyboard = await client.findStoryboardById(script.fields.video_id);
+        // Identity lookup must also agree with the owning Script relationship.
+        const fields = storyboard?.fields || {};
+        const linked = fields.Scripts || fields.script_id;
+        let ids = linked;
+        // Converted legacy links may be stored as a JSON array in the text field.
+        if (typeof linked === 'string') {
+          try { ids = JSON.parse(linked); } catch { ids = linked; }
+        }
+        const matches = Array.isArray(ids) ? ids.includes(script.id) : ids === script.id;
+        storyboards.push({ script, storyboard: matches ? storyboard : null });
+      }
+      return res.json({ storyboards, nextOffset: page.nextOffset });
+    } catch (err) { return projectError(res, err, 'Storyboards are temporarily unavailable'); }
+  });
+
   app.post('/api/projects/:id/scripts/:scriptId/approve', async (req, res) => {
     try {
       const client = makeAirtable();
@@ -273,6 +297,15 @@ export function createApp({
       } catch (err) { return projectError(res, err, 'Recovery run could not be started'); }
     }
   );
+
+  app.post('/api/projects/:id/pipeline-runs', validateBody(IdeaRunRequestSchema), async (req, res) => {
+    try {
+      assertProjectActive(await makeAirtable().getProject(req.params.id));
+      const run = await runs.create({ projectId: req.params.id, mode: 'pipeline', count: req.validatedBody.count });
+      if (!run) return res.status(503).json({ error: 'Pipeline queue is full' });
+      return res.status(202).json({ run });
+    } catch (err) { return projectError(res, err, 'Full pipeline could not be started'); }
+  });
 
   app.post(
     '/api/script-runs',

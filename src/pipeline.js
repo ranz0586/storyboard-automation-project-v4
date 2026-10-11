@@ -15,7 +15,7 @@ import { assertProjectActive, projectKey } from './utils/project.js';
 // Memory-conscious: scripts are generated and persisted ONE concept at a time,
 // so peak memory holds a single script rather than all N. This is the main
 // divergence from the n8n version that OOM'd at ~500MB.
-export async function runContentPipeline({ form, clients }) {
+export async function runContentPipeline({ form, clients, project: existingProject, onIdea, onResult }) {
   const { gemini, airtable, telegram } = clients;
   const conceptCount = clients.conceptCount ?? 10;
 
@@ -25,7 +25,7 @@ export async function runContentPipeline({ form, clients }) {
   //    existing project instead of creating one per run. project_id is
   //    niche + "_" + platform with spaces stripped from the platform,
   //    e.g. "What If_Facebook".
-  const project = await airtable.upsertProject({
+  const project = existingProject || await airtable.upsertProject({
     project_id: `${form.NICHE || ''}_${(form.PLATFORM || '').replace(/\s+/g, '')}`,
     niche: form.NICHE || '',
     platform: form.PLATFORM || '',
@@ -53,6 +53,7 @@ export async function runContentPipeline({ form, clients }) {
 
   // 3. Idea Agent -> N concepts
   const concepts = await ideaAgent(gemini, { research, count: conceptCount });
+  if (existingProject) concepts.splice(conceptCount);
   logger.info(`Idea Agent produced ${concepts.length} concepts`);
   // Release the (large) research report once concepts exist.
   research = null;
@@ -65,15 +66,17 @@ export async function runContentPipeline({ form, clients }) {
   // 4. Per-concept loop: save idea, generate/validate script, save script.
   for (let i = 0; i < concepts.length; i++) {
     const concept = concepts[i];
+    let idea;
 
     try {
-      const idea = await airtable.upsertIdea({
+      idea = await airtable.upsertIdea({
         ...flattenConcept(concept, { form, projectKey: projectKey(project) }),
         // Explicit lifecycle start; flipped to "Script Generated" below (and
         // the recovery flow picks up Draft/blank rows if that never happens).
         'Idea Status': 'Draft',
       });
 
+      await onIdea?.(idea);
       const result = await processIdeaScript({
         idea,
         concept,
@@ -87,6 +90,7 @@ export async function runContentPipeline({ form, clients }) {
       // Mark the idea done only after its script actually persisted.
       await airtable.updateIdea(idea.id, { 'Idea Status': 'Script Generated' });
 
+      await onResult?.({ idea, result });
       logger.info(
         `Script ${i + 1}/${concepts.length} ${result.generated ? 'saved' : 'already exists'}`,
         result.script.id
@@ -98,6 +102,7 @@ export async function runContentPipeline({ form, clients }) {
         nodeName: `Script loop #${i + 1}`,
         message: err?.message || String(err),
       }));
+      await onResult?.({ idea, error: err });
       // Continue with remaining concepts (mirrors continueErrorOutput intent).
     }
     concepts[i] = null;
