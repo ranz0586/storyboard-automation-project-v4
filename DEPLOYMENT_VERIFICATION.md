@@ -123,3 +123,11 @@ The owner's requested Script Agent pacing section was corrected to match the exi
 Focused script checks: 27 passed. Full backend rerun: 159 passed. Vercel build/emitted-handler checks passed. An initial suite run concurrent with the build hit the pre-existing localRestart.test.js fixture race (JSON.parse read partially written provider.json); no pacing code caused that fixture read, and the isolated suite passed without altering the test.
 
 Evidence: data/pacing-focused.log, data/pacing-suite.log, data/pacing-suite-isolated.log and data/pacing-vercel.log. The corrected prompts have not yet been deployed or verified with new live generation. No additional provider calls or content writes were made for this prompt fix.
+
+## Successful deployed pacing retry — 2026-10-07
+
+The owner requested another one-concept live retry after the pacing correction. The existing idea recxnEYTATa1J4XnK was reused; no new idea was generated. Script run 3a161220-5bc0-47f0-81f3-5600bf1a3f8c completed and saved Script rectp09uIeslBQCVN. It contains 11 uniform two-second scenes, with five spoken words and 100 ms pauses per narrated scene, measured at approximately 157.9 WPM. Generation and the first semantic review both had zero deterministic timing issues; no correction call was needed. A persisted request checkpoint matched the current corrected generation prompt exactly (with the configured model identifiers).
+
+Approval then completed storyboard run c8fe4953-63ee-4d52-b2b5-40b83457a754, saving Storyboard recZtvDtjyDvZTS7I and setting Script status to Story Generated. Final counts: one Idea, one Script, one Storyboard, zero recovery items. Test sessions were revoked. No application source changed during this retry.
+
+Evidence: data/deployed-one-concept-verification.json, data/deployed-pacing-prompt-check.json, data/deployed-pacing-response-audit.json and data/deployed-pacing-success-summary.json. The earlier failures remain preserved in the run history and data/deployed-one-concept-before-pacing-retry.json. This proves the corrected deployed script/storyboard lifecycle for this concept; it does not establish exact serving-model/key attribution or forced deployed restart/replay behavior.
