@@ -171,7 +171,7 @@ test('resumed cloud work reuses model, idea-save and metadata checkpoints', () =
     const { createCloudContext } = await import('../src/cloud/context.js');
     let models = 0,
       saves = 0,
-      searches = 0;
+      searches = 0, histories = 0;
     const options = {
       db,
       makeGemini: () => ({
@@ -181,6 +181,7 @@ test('resumed cloud work reuses model, idea-save and metadata checkpoints', () =
         },
       }),
       makeAirtable: () => ({
+        recentProjectContent: async () => { histories++; return [{id: 'recHistory' + histories, title: 'Earlier treatment'}]; },
         upsertIdea: async (fields) => {
           saves++;
           return { id: 'idea', fields };
@@ -189,7 +190,7 @@ test('resumed cloud work reuses model, idea-save and metadata checkpoints', () =
       makeTelegram: () => ({}),
       searchMetadata: async () => {
         searches++;
-        return [{ title: 'video' }];
+        return [{ title: 'video', url: 'https://www.youtube.com/watch?v=test', provider: 'youtube-data-api', retrieved_at: '2026-10-11T00:00:00Z' }];
       },
     };
     const first = createCloudContext(options).clients('run:test');
@@ -202,8 +203,13 @@ test('resumed cloud work reuses model, idea-save and metadata checkpoints', () =
       await first.airtable.upsertIdea({ title: 'same' }),
       await second.airtable.upsertIdea({ title: 'same' }),
     );
-    assert.deepEqual(await first.search('same'), await second.search('same'));
-    assert.deepEqual([models, saves, searches], [1, 1, 1]);
+    const originalMetadata = await first.search('same');
+    const replayMetadata = await second.search('same');
+    assert.deepEqual(originalMetadata, replayMetadata);
+    assert.equal(replayMetadata[0].provider, 'youtube-data-api');
+    assert.equal(replayMetadata[0].retrieved_at, '2026-10-11T00:00:00Z');
+    assert.deepEqual(await first.airtable.recentProjectContent('project'), await second.airtable.recentProjectContent('project'));
+    assert.deepEqual([models, saves, searches, histories], [1, 1, 1, 1]);
     const context = createCloudContext(options);
     let entered = 0;
     await assert.rejects(

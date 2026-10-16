@@ -4,6 +4,9 @@
 export function buildScriptPrompt({ concept, form }) {
   return `Create a highly optimized ${form.PLATFORM || ''} short-form video script for the single concept below.
 
+PROJECT CONTEXT (use these values; do not assume a US audience):
+${JSON.stringify({ niche: form.NICHE || "", platform: form.PLATFORM || "", audience: form["TARGET AUDIENCE"] || "unknown", content_style: form["CONTENT STYLE"] || "", channel_name: form["CHANNEL NAME (Optional)"] || "", channel_description: form["CHANNEL DESCRIPTION (Optional)"] || "" })}
+
 CRITICAL INSTRUCTION:
 Do not use a generic tone. Read the specific "emotional_angle" provided in the concept JSON below and use it as the driving emotional engine for this script. Use the concept's "selected_structure" for the scene-by-scene breakdown.
 
@@ -13,7 +16,8 @@ ${JSON.stringify(concept)}
 SCENE NARRATION TIMING:
 Plan pauses before narration. With 100 ms total pauses: use 5 words for 2-second scenes and 8 words for 3-second scenes. With zero pauses, the valid ranges are 5–6 and 8–9 words respectively. Different pauses require recalculating both bounds at 150–180 WPM. Expand narration below the minimum with useful clarity; shorten or split narration above the maximum. Preserve the chosen scene duration. Recount every scene before returning JSON.
 
-Generate:
+Immediate-value and suitable static openings are allowed. CTAs are optional: soft_cta may be empty; do not add a CTA scene merely to fill a template. Keep evidence hypotheses and unknowns distinct from facts. Substantive factual assertions need supporting excerpts in evidence.factual_sources; metadata and model memory are not factual support. Without them, write a genuinely hypothetical/non-factual treatment or avoid the unsupported assertion. Deliver the hook promise with useful information, without repeated premises or padding.
+
 Generate a complete JSON object matching the requested Airtable schema, including:
 - Full video metadata, title, and topic
 - Complete VoiceOver script

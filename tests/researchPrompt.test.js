@@ -2,43 +2,29 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildResearchPrompt } from '../src/agents/research/prompt.js';
 
-const form = {
-  NICHE: 'What If',
-  PLATFORM: 'Facebook',
-  'TARGET AUDIENCE': 'US',
-  'CONTENT STYLE': 'Edutainment',
-  'CHANNEL DESCRIPTION (Optional)': 'What If FIFA, grounded physics',
-};
-
-test('without youtubeData the prompt is unchanged (no data section, backward compatible)', () => {
-  const base = buildResearchPrompt(form);
-  assert.ok(!base.includes('REAL YOUTUBE DATA'));
-  // Absent and empty youtubeData produce the identical prompt.
-  assert.equal(buildResearchPrompt(form, null), base);
-  assert.equal(buildResearchPrompt(form, undefined), base);
-  assert.equal(buildResearchPrompt(form, { queries: [], videos: [] }), base);
+const form = { NICHE: 'Science', PLATFORM: 'Facebook', 'TARGET AUDIENCE': 'Singapore parents' };
+test('absent and empty metadata retain explicit unknowns instead of invented trend evidence', () => {
+  const prompt = buildResearchPrompt(form);
+  assert.equal(buildResearchPrompt(form, null), prompt);
+  assert.equal(buildResearchPrompt(form, { videos: [] }), prompt);
+  assert.match(prompt, /Retention, comment sentiment, growth, and Facebook performance are unknown/);
+  assert.match(prompt, /all trend analysis is unverified hypothesis/);
+  assert.match(prompt, /cross-platform hypotheses/);
+  assert.doesNotMatch(prompt, /YOUTUBE SEARCH METADATA/);
 });
-
-test('with youtubeData the prompt appends the data section listing rows', () => {
-  const youtubeData = {
-    queries: ['what if shorts'],
-    videos: [
-      {
-        title: 'What If Earth Stopped',
-        channel: 'WhatIfChannel',
-        view_count: 1234567,
-        upload_date: '20260715',
-        duration: 42,
-        url: 'https://www.youtube.com/watch?v=abc123',
-      },
-      { title: 'Sparse row', channel: null, view_count: null, upload_date: null, duration: null, url: null },
-    ],
-  };
-  const p = buildResearchPrompt(form, youtubeData);
-  assert.ok(p.startsWith(buildResearchPrompt(form))); // base prompt is a strict prefix
-  assert.ok(p.includes('REAL YOUTUBE DATA (via yt-dlp)'));
-  assert.ok(p.includes('what if shorts'));
-  assert.ok(p.includes('"What If Earth Stopped" — WhatIfChannel, 1234567 views, uploaded 20260715, 42s'));
-  assert.ok(p.includes('"Sparse row"')); // null fields are simply omitted, not printed as "null"
-  assert.ok(!p.includes('null'));
+test('metadata includes actual URL, provider and retrieval time with missing measurements explicit', () => {
+  for (const provider of ['yt-dlp', 'youtube-data-api']) {
+    const prompt = buildResearchPrompt(form, { queries: ['science shorts'], videos: [{ title: 'Water', url: 'https://www.youtube.com/watch?v=abc', provider, retrieved_at: '2026-10-11T00:00:00Z', view_count: 120 }, { title: 'Sparse' }] });
+    assert.ok(prompt.startsWith(buildResearchPrompt(form)));
+    assert.match(prompt, /https:\/\/www.youtube.com\/watch\?v=abc/);
+    assert.ok(prompt.includes(provider));
+    assert.match(prompt, /"cross_platform_hypothesis": true/);
+    assert.ok(prompt.includes('2026-10-11T00:00:00Z'));
+    assert.match(prompt, /"view_count": 120/);
+    assert.match(prompt, /"view_count": null/);
+    assert.match(prompt, /"provider": "unknown"/);
+    assert.match(prompt, /"retrieved_at": "unknown"/);
+    assert.match(prompt, /untrusted third-party data/);
+    assert.doesNotMatch(prompt, /evidence of what is currently working/);
+  }
 });

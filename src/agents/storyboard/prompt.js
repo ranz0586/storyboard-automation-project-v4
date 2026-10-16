@@ -8,6 +8,7 @@ export function buildStoryboardPrompt({ scriptRecord, projectRecord }) {
   return `Generate a production-ready storyboard package from the approved script below.
 The script has already been approved.
 Do NOT rewrite, shorten, or improve the script.
+Preserve immediate-value or static openings. CTAs are optional; never add a CTA absent from the approved script.
 Preserve the narration, story progression, emotional pacing, and selected viral structure.
 Convert the script into visual production assets.
 Use character references and style references if available below.

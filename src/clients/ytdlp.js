@@ -55,7 +55,8 @@ export function searchYouTube(query, { limit, timeoutMs } = {}) {
       (err, stdout, stderr) => {
         if (stderr) logger.warn(`yt-dlp stderr (query "${query}")`, String(stderr).slice(0, 500));
         if (err) return reject(err);
-        resolve(parseNdjsonVideos(stdout));
+        const retrievedAt = new Date().toISOString();
+        resolve(parseNdjsonVideos(stdout).map(row => ({ ...row, provider: 'yt-dlp', retrieved_at: retrievedAt })));
       }
     );
   });

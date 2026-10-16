@@ -416,3 +416,18 @@ test('recovery streams stuck ideas sequentially with a bounded page size', async
   assert.deepEqual(order, ['recIdea1', 'recIdea2']);
   assert.equal(selectOptions.pageSize, 2);
 });
+
+
+test('editorial history is a bounded recent project sample, including completed scripts and excluding the current item', async () => {
+  const queries=[];
+  const client=new AirtableClient({base:table=>({select:options=>{queries.push({table,options});return {firstPage:async()=>[
+    {id:'recOwn',createdTime:'2026-10-01T00:00:00Z',fields:{Projects:'science',title:'Own idea'}},
+    {id:'recPrior',createdTime:'2026-10-02T00:00:00Z',fields:{Projects:'science',title:'Completed',status:'Story Generated',video_id:'prior',voiceover_script:'Earlier explanation'}},
+    {id:'recOther',fields:{Projects:'another-owner',title:'Private content'}},
+  ]};}})});
+  const history=await client.recentProjectContent('science',{excludeIdeaId:'recOwn',excludeVideoId:'current'});
+  assert.ok(history.every(row=>row.id==='recPrior'));assert.equal(history.length,2);
+  for(const {options} of queries){assert.equal(options.maxRecords,20);assert.equal(options.pageSize,20);assert.match(options.filterByFormula,/Projects.*science.*CREATED_TIME.*-30/);assert.doesNotMatch(options.filterByFormula,/Story Generated/);}
+  assert.deepEqual(await client.recentProjectContent(),[]);
+  const normal=await client.recentProjectContent('science');assert.ok(normal.some(row=>row.id==='recOwn'));
+});

@@ -15,6 +15,8 @@ function formFrom(project, idea) {
     PLATFORM: platform || p.platform || '',
     'TARGET AUDIENCE': p.target_audience || '',
     'CONTENT STYLE': p.content_style || '',
+    'CHANNEL NAME (Optional)': p.channel_page_name || '',
+    'CHANNEL DESCRIPTION (Optional)': p.description || '',
     'Has Character Reference Sheet': p.has_character_reference || 'N',
     'Has Style Reference': p.has_style_reference || 'N',
   };

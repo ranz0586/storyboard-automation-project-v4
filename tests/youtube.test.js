@@ -33,7 +33,9 @@ test('YouTube API returns the existing compact search metadata contract', async 
     },
   });
   assert.equal(calls[0].searchParams.get('maxResults'), '50');
-  assert.deepEqual(result, [
+  assert.equal(result[0].provider, 'youtube-data-api');
+  assert.ok(Number.isFinite(Date.parse(result[0].retrieved_at)));
+  assert.deepEqual(result.map(({ provider, retrieved_at, ...row }) => row), [
     {
       title: 'Parenting',
       channel: 'Channel',

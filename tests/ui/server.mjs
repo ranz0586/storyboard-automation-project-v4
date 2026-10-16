@@ -13,7 +13,7 @@ import { IDEA_SYSTEM } from '../../src/agents/idea/system.js';
 import { SCRIPT_SYSTEM } from '../../src/agents/script/system.js';
 import { STORYBOARD_SYSTEM } from '../../src/agents/storyboard/system.js';
 import { SCRIPT_VALIDATION_SYSTEM } from '../../src/agents/scriptValidation/system.js';
-import { scriptFromValidationPrompt, validationReply } from '../helpers/scriptValidation.js';
+import { scriptFromValidationPrompt, historyFromValidationPrompt, validationReply } from '../helpers/scriptValidation.js';
 
 config.ytdlp.enabled = false;
 config.locks.scriptDir = 'data/ui-test-locks';
@@ -68,6 +68,7 @@ const client = {
   },
   forEachEligibleIdea: async (id, { limit }, visit) => { const rows = copy(eligible(byId(projects, id).fields.project_id).slice(0, limit)); for (const row of rows) await visit(row); return rows.length; },
   forEachStuckIdea: async (filter, { limit }, visit) => { const rows = copy(ideas.filter(idea => idea.fields['Idea Status'] === 'Draft' && filter.includes(idea.fields.Projects)).slice(0, limit)); for (const row of rows) await visit(row); },
+  recentProjectContent: async (key, { excludeIdeaId, excludeVideoId } = {}) => copy([...ideas, ...scripts].filter(row => row.fields.Projects === key && row.id !== excludeIdeaId && (!excludeVideoId || row.fields.video_id !== excludeVideoId)).slice(-20).map(row => ({id: row.id, title: row.fields.title, topic: row.fields.topic}))),
   getIdea: async id => copy(byId(ideas, id)),
   updateIdea: async (id, fields) => { Object.assign(byId(ideas, id).fields, fields); },
   findScriptByVideoId: async videoId => copy(scripts.find(script => script.fields.video_id === videoId) || null),
@@ -92,7 +93,7 @@ const client = {
 const gemini = { generate: async ({ system, prompt }) => {
   await new Promise(resolve => setTimeout(resolve, 100));
   if (system === RESEARCH_SYSTEM) return { report: 'Test research' };
-  if (system === IDEA_SYSTEM) return { concepts: Array.from({ length: Number(prompt.match(/- (\d+) content concepts/)[1]) }, () => ({ title: `Science idea ${++sequence}`, topic: 'Science', emotional_angle: 'Curiosity', content_score: 90 })) };
+  if (system === IDEA_SYSTEM) return { concepts: Array.from({ length: Number(prompt.match(/Exactly (\d+) content concepts/)[1]) }, () => ({ title: `Science idea ${++sequence}`, topic: 'Science', emotional_angle: 'Curiosity', content_score: 90 })) };
   if (system === SCRIPT_SYSTEM) {
     if (failScript) { failScript = false; throw new Error('Simulated provider outage'); }
     const concept = JSON.parse(prompt.split('CONCEPT TO PROCESS:\n')[1].split('\n')[0]);
@@ -100,7 +101,7 @@ const gemini = { generate: async ({ system, prompt }) => {
   }
   if (system === STORYBOARD_SYSTEM) return { master_assets: {}, structure3: [{ panel_number: 1, scene_number: 1,
     panel_prompt: 'A cinematic science experiment panel.', video_prompt: 'Track the experiment as water moves.' }] };
-  if (system === SCRIPT_VALIDATION_SYSTEM) return validationReply(scriptFromValidationPrompt(prompt));
+  if (system === SCRIPT_VALIDATION_SYSTEM) return validationReply(scriptFromValidationPrompt(prompt), historyFromValidationPrompt(prompt));
   throw new Error('Unexpected agent');
 } };
 const telegram = { errorAlert: async value => { alerts.push({ type: 'error', value }); }, scriptsGeneratedAlert: async value => { alerts.push({ type: 'success', value }); } };

@@ -59,15 +59,16 @@ export async function processIdeaScript({ idea, concept, form, projectKey, gemin
   }
 }
 
-async function processUnlocked({ scriptId, concept, form, projectKey, gemini, airtable }) {
+async function processUnlocked({ scriptId, idea, concept, form, projectKey, gemini, airtable }) {
   const existing = await airtable.findScriptByVideoId(scriptId);
   if (isUsableScriptRecord(existing)) {
     return { script: existing, generated: false, updated: false };
   }
 
+  const recentContent = await airtable.recentProjectContent?.(projectKey, { excludeIdeaId: idea.id, excludeVideoId: scriptId }) || [];
   let script = await scriptAgent(gemini, { concept, form });
   logger.mem(`script:${scriptId}:generated`);
-  script = await scriptValidationAgent(gemini, { script, concept, form });
+  script = await scriptValidationAgent(gemini, { script, concept, form, recentContent });
   logger.mem(`script:${scriptId}:validated`);
   const saved = await airtable.upsertScript(
     flattenScript(script, { form, projectKey, scriptId })

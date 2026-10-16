@@ -29,6 +29,7 @@ export async function searchYouTubeApi(
     id: entries.map((item) => item.id.videoId).join(','),
   });
   const rows = new Map((details.items || []).map((item) => [item.id, item]));
+  const retrievedAt = new Date().toISOString();
   return entries.map((entry) => {
     const data = rows.get(entry.id.videoId),
       snippet = data?.snippet || entry.snippet || {};
@@ -36,6 +37,7 @@ export async function searchYouTubeApi(
       data?.contentDetails?.duration || '',
     );
     return {
+      provider: 'youtube-data-api', retrieved_at: retrievedAt,
       title: snippet.title ?? null,
       channel: snippet.channelTitle ?? null,
       view_count:

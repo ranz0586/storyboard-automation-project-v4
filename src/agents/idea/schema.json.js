@@ -1,4 +1,4 @@
-// The n8n Idea Agent's Structured Output Parser2 schema, verbatim. In n8n the
+// Workflow output schema with owner-authorized evidence extension. In n8n the
 // parser appends this to the agent's instructions — that is what forced the
 // model to emit production/review (and content_score as a number). We replicate
 // that by embedding it in the user prompt (see prompt.js).
@@ -56,6 +56,43 @@ export const IDEA_OUTPUT_JSON_SCHEMA = `{
             },
             "required": ["visual_potential_score", "storyboard_ready"]
           },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "claims": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "hypothesis",
+                        "unknown"
+                      ]
+                    },
+                    "source_urls": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "classification",
+                    "source_urls"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "claims"
+            ]
+          },
           "review": {
             "type": "object",
             "properties": {
@@ -67,7 +104,7 @@ export const IDEA_OUTPUT_JSON_SCHEMA = `{
             "required": ["shareability", "value_delivered", "series_potential", "strategy_notes"]
           }
         },
-        "required": ["rank", "content_score", "title", "topic", "emotional_angle", "hook_style", "differentiation_opportunities", "viral_positioning", "production", "review"]
+        "required": ["rank", "content_score", "title", "topic", "emotional_angle", "hook_style", "differentiation_opportunities", "viral_positioning", "production", "review", "evidence"]
       }
     }
   },

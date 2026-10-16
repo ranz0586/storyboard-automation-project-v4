@@ -125,3 +125,16 @@ The companion repo `D:\n8n-project-claude` holds the n8n workflow JSON files and
 - Keep provider work outside database transactions. Lease guards fence subsequent calls after heartbeat failure. Provider responses and YouTube metadata are checkpointed to prevent successful calls from repeating on replay. Do not serialize API keys or database URLs into Workflow inputs/outputs.
 - Vercel uses official YouTube Data API metadata, configured by server-only `YOUTUBE_API_KEY`. Local operator execution still supports yt-dlp. `DATABASE_URL` and `CRON_SECRET` are server-only.
 - Local-to-cloud state import requires stopped servers: `npm run db:migrate -- --import-local --servers-stopped`. Do not run local and cloud schedulers concurrently against production Airtable; their locking systems differ.
+
+## Owner-authorized creative and evidence updates
+
+- Research, Idea, Script, validation, and Storyboard instructions include the owner-authorized creative/evidence corrections: project audience context, requested concept count, immediate-value and suitable static openings, and optional CTAs. Preserve the sixteen structure options and deterministic timing budgets.
+- Research separates canonical YouTube metadata observations from unverified model hypotheses; retention, sentiment, growth, and Facebook performance remain unknown. Retrieval timestamps are captured at the provider boundary and retained on cloud replay.
+- New Ideas persist compact evidence alongside editorial notes in the existing `strategy_notes` text field using an `idea_evidence_version: 1` JSON envelope. `flattenConcept` / `unflattenIdea` preserve it across manual, scheduled, and recovery runs; legacy plain notes remain supported. Do not treat cited search metadata as factual verification of video content.
+
+## Phase 3 editorial acceptance
+
+- Newly generated scripts require complete per-scene claim/usefulness reviews and a hook/payoff/originality review, with at most the existing two validation calls. Missing reviews or unresolved editorial issues stop Script persistence and Idea completion. Reused legacy Scripts keep their idempotent behavior.
+- Factual narration needs matching supplied `evidence.factual_sources` URL/excerpt citations and an explicit support verdict. Search metadata and model knowledge do not qualify. Factual excerpts are retained from supplied context, never from model-invented sources; this phase does not automatically retrieve articles. Unsupported assertions must be removed or rejected, not disguised as hedged safety advice.
+- `recentProjectContent` supplies a bounded sample (up to twenty rows per table from the last thirty days, twenty summaries returned) scoped to the custom project key, including completed Scripts. Shared Script generation excludes its own Idea/video; cloud execution checkpoints history to keep replay prompts stable. This is a sample, not exhaustive originality verification.
+- Accepted editorial reviews persist inside `scenes_json`, with the overall summary on the first scene. Keep timing, explicit human approval, and existing Airtable mappings.

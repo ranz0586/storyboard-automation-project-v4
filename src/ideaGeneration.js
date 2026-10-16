@@ -26,7 +26,8 @@ export async function generateIdeasForProject({ project, count, gemini, airtable
   let research = await researchAgent(gemini, form, youtubeData);
   youtubeData = null;
   logger.mem('idea-run:after:research');
-  const concepts = await ideaAgent(gemini, { research, count });
+  const recentContent = await airtable.recentProjectContent?.(projectKey(project)) || [];
+  const concepts = await ideaAgent(gemini, { research, count, recentContent });
   research = null;
   logger.mem('idea-run:after:idea');
 

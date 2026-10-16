@@ -1,6 +1,7 @@
 // Transforms mirroring the workflow's Code nodes
 // ("Flatten Concept" and "Flatten Script"). No mutation of inputs; the only
 // side effect is a warning log when agent output looks partial (see below).
+import { encodeIdeaNotes, decodeIdeaNotes } from './utils/evidence.js';
 import { logger } from './utils/logger.js';
 
 // The || ''/0 fallbacks mask missing agent output — data still saves, but a
@@ -70,7 +71,7 @@ export function flattenConcept(concept, { form, projectKey }) {
     shareability: c.review?.shareability ?? c.content_score?.shareability ?? 0,
     value_delivered: c.review?.value_delivered ?? c.content_score?.value_delivered ?? 0,
     series_potential: c.review?.series_potential ?? c.content_score?.series_potential ?? 0,
-    strategy_notes: c.review?.strategy_notes || '',
+    strategy_notes: encodeIdeaNotes(c.review?.strategy_notes, c.evidence),
 
     niche: form.NICHE || '',
     platform: form.PLATFORM || '',
@@ -87,7 +88,9 @@ export function flattenConcept(concept, { form, projectKey }) {
 // consumes these exact fields.
 export function unflattenIdea(ideaRecord) {
   const f = ideaRecord?.fields || {};
+  const notes = decodeIdeaNotes(f.strategy_notes);
   return {
+    ...(notes.evidence ? { evidence: notes.evidence } : {}),
     rank: f.rank || 0,
     content_score: f.content_score || 0,
     title: f.title || '',
@@ -122,7 +125,7 @@ export function unflattenIdea(ideaRecord) {
       shareability: f.shareability || 0,
       value_delivered: f.value_delivered || 0,
       series_potential: f.series_potential || 0,
-      strategy_notes: f.strategy_notes || '',
+      strategy_notes: notes.notes,
     },
   };
 }

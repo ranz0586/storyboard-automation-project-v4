@@ -55,12 +55,12 @@ export function createCloudContext({
         if (typeof fn !== 'function') return fn;
         return async (...args) => {
           guard();
-          // Checkpoint idea saves so replay never resets a completed idea to Draft.
-          if (key === 'upsertIdea') {
+          // Keep saved ideas and the editorial history snapshot stable across replay.
+          if (key === 'upsertIdea' || key === 'recentProjectContent') {
             const id =
               namespace +
-              ':idea:' +
-              createHash('sha256').update(JSON.stringify(args[0])).digest('hex');
+              (key === 'upsertIdea' ? ':idea:' : ':history:') +
+              createHash('sha256').update(JSON.stringify(key === 'upsertIdea' ? args[0] : args)).digest('hex');
             const saved = await state.effect(id);
             if (saved !== undefined) return saved;
             const value = await fn.apply(target, args);

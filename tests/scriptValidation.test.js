@@ -12,7 +12,7 @@ import { runIdeaRecovery } from '../src/ideaRecoveryPipeline.js';
 import { runContentPipeline } from '../src/pipeline.js';
 import { RESEARCH_SYSTEM } from '../src/agents/research/system.js';
 import { IDEA_SYSTEM } from '../src/agents/idea/system.js';
-import { scriptFromValidationPrompt } from './helpers/scriptValidation.js';
+import { editorialReply, claimReply, scriptFromValidationPrompt } from './helpers/scriptValidation.js';
 
 const nineWords = 'This simple experiment reveals how water changes under pressure.';
 function scene(number = 1, narration = nineWords, duration = 3) {
@@ -24,7 +24,7 @@ function script(scenes = [scene()]) {
     voiceover: { full_script: scenes.map(scene => scene.narration).join(' ') } }, scenes };
 }
 function reply(candidate) {
-  return { approved: true, script: candidate, issues: [], scene_reviews: candidate.scenes.map(scene => ({ scene_number: scene.scene_number,
+  return { approved: true, script: candidate, issues: [], editorial_review: editorialReply(candidate), scene_reviews: candidate.scenes.map(scene => ({ ...claimReply(scene), scene_number: scene.scene_number,
     visuals_match_narration: true, single_visual_moment: true, reason: 'The pressure chamber depicts the narrated experiment.' })) };
 }
 const context = { concept: { title: 'Water experiment' }, form: { NICHE: 'Science', PLATFORM: 'YouTube' } };

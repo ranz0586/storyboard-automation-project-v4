@@ -379,6 +379,23 @@ export class AirtableClient {
     return normalizeRecord({ id: record.id, fields: record.fields });
   }
 
+  // shortcut: sample up to twenty rows per table from the last month; add a created-time field for exhaustive newest-first sorting.
+  async recentProjectContent(key, { excludeIdeaId, excludeVideoId } = {}) {
+    if (!key) return [];
+    const filterByFormula = `AND({Projects} = ${escapeFormulaValue(key)}, IS_AFTER(CREATED_TIME(), DATEADD(NOW(), -30, 'days')))`;
+    const records = await Promise.all([this.tables.ideas, this.tables.scripts].map(async (table, index) => {
+      const fields = ['Projects', 'title', 'topic', 'emotional_angle', ...(index ? ['hook', 'voiceover_script', 'video_id'] : ['hook_text', 'story_arc'])].map(field => this.#fieldName(table, field));
+      const rows = await this.base(table).select({ fields, filterByFormula, maxRecords: 20, pageSize: 20 }).firstPage();
+      return rows.map(record => ({ ...normalizeRecord(record), createdTime: record.createdTime || record._rawJson?.createdTime, kind: index ? 'script' : 'idea' }));
+    }));
+    return records.flat().filter(record => record.fields.Projects === key && record.id !== excludeIdeaId && (!excludeVideoId || record.fields.video_id !== excludeVideoId))
+      .sort((a, b) => String(b.createdTime || '').localeCompare(String(a.createdTime || ''))).slice(0, 20)
+      .map(({ id, kind, fields: f }) => ({ id, kind, title: String(f.title || '').slice(0, 200),
+        topic: String(f.topic || '').slice(0, 200), emotional_angle: String(f.emotional_angle || '').slice(0, 300),
+        hook: String(f.hook_text || f.hook || '').slice(0, 300),
+        treatment: String(f.story_arc || f.voiceover_script || '').slice(0, 800) }));
+  }
+
   async getScript(id) {
     const record = await this.base(this.tables.scripts).find(id);
     return normalizeRecord({ id: record.id, fields: record.fields });

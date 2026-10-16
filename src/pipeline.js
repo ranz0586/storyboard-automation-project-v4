@@ -52,8 +52,9 @@ export async function runContentPipeline({ form, clients, project: existingProje
   logger.mem('after:research');
 
   // 3. Idea Agent -> N concepts
-  const concepts = await ideaAgent(gemini, { research, count: conceptCount });
-  if (existingProject) concepts.splice(conceptCount);
+  const recentContent = await airtable.recentProjectContent?.(projectKey(project)) || [];
+  const concepts = await ideaAgent(gemini, { research, count: conceptCount, recentContent });
+  concepts.splice(conceptCount);
   logger.info(`Idea Agent produced ${concepts.length} concepts`);
   // Release the (large) research report once concepts exist.
   research = null;

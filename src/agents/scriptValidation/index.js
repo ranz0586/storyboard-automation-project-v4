@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { SCRIPT_VALIDATION_SYSTEM } from './system.js';
 import { buildScriptValidationPrompt } from './prompt.js';
 import { UsableScriptSchema } from '../../schemas.js';
+import { inspectEditorialReview } from '../../utils/editorialReview.js';
 import { inspectScriptTiming } from '../../utils/scriptTiming.js';
 
 const ValidationOutputSchema = z.object({
@@ -12,7 +13,19 @@ const ValidationOutputSchema = z.object({
     visuals_match_narration: z.boolean(),
     single_visual_moment: z.boolean(),
     reason: z.string().trim().min(1),
+    narration: z.string(),
+    useful_narration: z.boolean(),
+    claim_type: z.enum(['factual', 'metadata', 'hypothesis', 'fiction', 'opinion', 'instruction', 'unsupported', 'silent']),
+    sensitive_claim: z.boolean(),
+    support_matches_claim: z.boolean(),
+    supports: z.array(z.object({ source_url: z.string().url(), quote: z.string().trim().min(1), field: z.string().optional() })),
   })),
+  editorial_review: z.object({
+    hook_fulfilled: z.boolean(), hook_quote: z.string().trim().min(1),
+    payoff_quote: z.string().trim().min(1), payoff_scene_number: z.number().int().positive(),
+    distinct_treatment: z.boolean(), originality_reason: z.string().trim().min(1),
+    compared_record_ids: z.array(z.string()),
+  }),
   issues: z.array(z.string()).default([]),
 });
 
@@ -22,10 +35,11 @@ function normalizeReview(raw) {
   // never manufacture an approval or infer a missing semantic review.
   if (!raw || typeof raw !== 'object') return raw;
   return { ...raw, scene_reviews: raw.scene_reviews ?? raw.script?.scene_reviews,
+    editorial_review: raw.editorial_review ?? raw.script?.editorial_review,
     issues: raw.issues ?? raw.script?.issues };
 }
 
-export async function scriptValidationAgent(gemini, { script, concept, form }) {
+export async function scriptValidationAgent(gemini, { script, concept, form, recentContent = [] }) {
   let candidate = script, feedback = [];
   const originalDuration = script.scenes[0]?.duration_seconds;
   // One review/repair plus one correction opportunity; never an unbounded
@@ -34,12 +48,12 @@ export async function scriptValidationAgent(gemini, { script, concept, form }) {
     const parsed = ValidationOutputSchema.safeParse(normalizeReview(await gemini.generate({
       system: SCRIPT_VALIDATION_SYSTEM,
       prompt: buildScriptValidationPrompt({ script: candidate, concept, form,
-        timing: inspectScriptTiming(candidate), feedback }),
+        timing: inspectScriptTiming(candidate), feedback, recentContent }),
       json: true,
     })));
     if (!parsed.success) {
       feedback = parsed.error.issues.map(issue => `Output ${issue.path.join('.')}: ${issue.message}`);
-      feedback.push('Return approved, script, scene_reviews and issues as root fields of the validation response');
+      feedback.push('Return approved, script, scene_reviews, editorial_review and issues as root fields of the validation response');
       continue;
     }
     const result = parsed.data;
@@ -60,10 +74,13 @@ export async function scriptValidationAgent(gemini, { script, concept, form }) {
       const review = reviews.find(item => item.scene_number === scene.scene_number);
       if (!review?.visuals_match_narration || !review?.single_visual_moment) feedback.push(`Scene ${scene.scene_number}: visuals must support its narration and depict one visual moment`);
     }
+    feedback.push(...inspectEditorialReview(candidate, reviews, result.editorial_review, concept, recentContent));
     if (!feedback.length) {
       // Persist the measured target pace alongside pauses in scenes_json;
       // downstream narration tooling can use it without guessing a speed.
       candidate.scenes.forEach((scene, index) => {
+        scene.editorial_review = result.scene_reviews.find(review => review.scene_number === scene.scene_number);
+        if (index === 0) scene.editorial_review = { ...scene.editorial_review, summary: result.editorial_review };
         scene.tts = { ...scene.tts, speaking_rate_wpm: Number((timing.scenes[index].wpm || 0).toFixed(3)) };
       });
       return candidate;
