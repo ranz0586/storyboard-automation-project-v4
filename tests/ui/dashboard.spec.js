@@ -78,11 +78,11 @@ test('complete dashboard lifecycle uses existing generation and persistence path
 
   // Cursor pagination, approval and downstream storyboard persistence.
   await workspace(page, 'Scripts');
-  await expect(page.locator('#scripts details')).toHaveCount(2);
+  await expect(page.locator('#scripts > details')).toHaveCount(2);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(page.locator('#scripts details')).toHaveCount(1);
+  await expect(page.locator('#scripts > details')).toHaveCount(1);
   await page.getByRole('button', { name: 'Previous', exact: true }).click();
-  await page.locator('#scripts summary').first().click();
+  await page.locator('#scripts > details > summary').first().click();
   await page.getByRole('button', { name: 'Approve for storyboard', exact: true }).first().click();
   await expect(stat(page, 'Approved')).toHaveText('1');
   const storyboard = await (await request.post(`/__test/storyboard/${projectId}`)).json();
@@ -262,7 +262,7 @@ test('manual full pipeline creates ideas and Draft scripts in the selected proje
   await page.getByLabel('Pipeline concept count', { exact: true }).fill('1');
   await page.getByRole('button', { name: 'Run full pipeline', exact: true }).click();
   await workspace(page, 'Scripts');
-  await expect(page.locator('#scripts summary')).toContainText('Draft');
+  await expect(page.locator('#scripts > details > summary')).toContainText('Draft');
   const persisted = await state(request);
   const project = persisted.projects.find(row => row.fields.channel_page_name === 'Manual pipeline project');
   expect(persisted.ideas.filter(row => row.fields.Projects === project.fields.project_id)).toHaveLength(1);

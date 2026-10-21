@@ -84,7 +84,7 @@ export async function runContentPipeline({ form, clients, project: existingProje
         form,
         projectKey: projectKey(project),
         gemini,
-        airtable,
+        airtable, briefStore: clients.briefStore,
       });
       if (result.generated) savedScripts.push(scriptSummary(result.script));
 

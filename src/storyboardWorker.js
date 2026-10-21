@@ -1,3 +1,4 @@
+import { formFromProject } from './ideaGeneration.js';
 import { config } from './config.js';
 import { storyboardAgent } from './agents/storyboard/index.js';
 import { flattenStoryboard } from './transforms.js';
@@ -8,7 +9,7 @@ import { assertUsableStoryboard, isUsableStoryboardRecord, approvedScriptTimelin
 // Shared by server polls and operator runs. The lock covers fresh lifecycle
 // reads, generation, persistence and completion, including retries after an
 // ambiguous write or a failed Script status update.
-export async function processScriptStoryboard({ scriptRecord, clients, onStart, withLock = withFileLock }) {
+export async function processScriptStoryboard({ scriptRecord, clients, onStart, briefStore = clients.briefStore, withLock = withFileLock }) {
   const { airtable, gemini } = clients;
   const storyboardId = scriptRecord.fields.video_id;
   if (typeof storyboardId !== 'string' || !storyboardId.trim()) {
@@ -26,13 +27,17 @@ export async function processScriptStoryboard({ scriptRecord, clients, onStart, 
       : (ref ? await airtable.findProjectByKey(ref) : null);
     onStart?.({ scriptRecord: script, projectRecord: project });
 
+    const ownerKey = project?.fields?.project_id;
+    let brief = ownerKey && briefStore ? await briefStore.get(ownerKey, storyboardId) : null;
     let saved = await airtable.findStoryboardById(storyboardId);
     let generated = false;
-    if (!isUsableStoryboardRecord(saved, storyboardId, script)) {
+    if (!isUsableStoryboardRecord(saved, storyboardId, script, { structures: brief?.structures })) {
       if (!project) logger.warn(`Storyboard: script ${storyboardId} has no linked Project — continuing without references`);
+      if (ownerKey && briefStore) brief = await briefStore.freeze(ownerKey, storyboardId, formFromProject(project), 'legacy-storyboard');
       const output = assertUsableStoryboard(await storyboardAgent(gemini, {
-        scriptRecord: script, projectRecord: project,
-      }), script);
+        scriptRecord: script, projectRecord: project, brief,
+      }), script, { structures: brief?.structures });
+      if (brief) output.production_brief = brief;
       saved = await airtable.upsertStoryboard(flattenStoryboard(output, script, project));
       generated = true;
     }

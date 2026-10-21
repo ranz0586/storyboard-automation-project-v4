@@ -1,3 +1,4 @@
+import { guidanceFor } from '../../creativeGuidance/index.js';
 export function buildScriptValidationPrompt({ script, concept, form, timing, feedback = [], recentContent = [] }) {
   return `Validate and repair this single script for factual support, hook fulfillment, useful narration, distinct treatment, timing and scene visuals.
 
@@ -25,5 +26,5 @@ Below min_words: expand or rephrase narration with useful clarity to meet the mi
 Above max_words: shorten unnecessary words or split essential information into more scenes of the same chosen duration.
 Recount every repaired scene using its final pauses. Resolve BOTH under-length and over-length issues before setting approved=true. Rebuild full_script from final narration in scene order.
 
-Return the complete final script, editorial_review, and an explicit visual and claim review for every final scene. Review the FINAL repaired narration, not the original. Cite only supplied evidence excerpts or actual metadata fields; unsupported factual claims cannot pass. Search titles are not proof of the science or advice in a video. Compare all supplied recent record IDs and explain the distinct contribution. Narrated scenes must remain between 150 and 180 WPM. Do not output a verdict alone.`;
+Return the complete final script, editorial_review, and an explicit visual and claim review for every final scene. Review the FINAL repaired narration, not the original. Cite only supplied evidence excerpts or actual metadata fields; unsupported factual claims cannot pass. Search titles are not proof of the science or advice in a video. Compare all supplied recent record IDs and explain the distinct contribution. Narrated scenes must remain between 150 and 180 WPM. Do not output a verdict alone.` + guidanceFor('validation', form['PRODUCTION BRIEF']);
 }

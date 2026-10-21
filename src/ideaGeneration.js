@@ -14,6 +14,8 @@ export function formFromProject(project) {
     'CONTENT STYLE': p.content_style || '',
     'CHANNEL NAME (Optional)': p.channel_page_name || '',
     'CHANNEL DESCRIPTION (Optional)': p.description || '',
+    'CHARACTER REFERENCES': p.character_references ?? null,
+    'STYLE REFERENCES': p.style_references ?? null,
     'Has Character Reference Sheet': p.has_character_reference || 'N',
     'Has Style Reference': p.has_style_reference || 'N',
   };

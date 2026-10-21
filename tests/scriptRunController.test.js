@@ -1,3 +1,4 @@
+import { BriefStore } from '../src/briefs/briefStore.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RunStore } from '../src/runs/runStore.js';
@@ -63,7 +64,7 @@ async function terminal(store, id) {
   throw new Error('run did not reach a terminal state');
 }
 
-function fixture(ideas, { failures = new Set() } = {}) {
+function fixture(ideas, { failures = new Set(), briefStore } = {}) {
   const store = new RunStore();
   const queue = new TaskQueue({ maxConcurrency: 1, maxQueued: 10 });
   const scripts = new Map();
@@ -105,6 +106,7 @@ function fixture(ideas, { failures = new Set() } = {}) {
   const controller = new ScriptRunController({
     store,
     queue,
+    briefStore,
     makeGemini: () => gemini,
     makeAirtable: () => airtable,
     makeTelegram: () => ({ errorAlert: async () => {} }),
@@ -235,4 +237,19 @@ test('interrupted full pipelines resume only their own saved ideas without repea
   assert.deepEqual(replacement.selectedIdeaIds, ['recPending']);
   assert.equal(replacement.fullPipeline, undefined);
   assert.equal(controller.retry(prior.id).id, replacement.id);
+});
+
+test('manual, scheduled and recovery controllers use the same frozen format and guidance store', async () => {
+  for (const source of ['MANUAL', 'SCHEDULED', 'RECOVERY']) {
+    const briefStore = new BriefStore(); briefStore.set('Science_YouTube', { structures: ['structure2'] });
+    const id = 'recFrozen' + source;
+    const f = fixture([idea(id, 'Water ' + source)], { briefStore });
+    const run = f.controller.create({ projectId: 'recProject1', mode: 'count', count: 1 }, { source });
+    const finished = await terminal(f.store, run.id);
+    assert.equal(finished.status, 'COMPLETED');
+    const brief = briefStore.get('Science_YouTube', 'idea_' + id);
+    assert.deepEqual(brief.structures, ['structure2']);
+    assert.equal(brief.guidancePacks.length, 4);
+    assert.equal(brief.origin, 'script');
+  }
 });

@@ -1,12 +1,15 @@
+import { guidanceFor } from '../../creativeGuidance/index.js';
+import { structureSelectionInstruction } from '../../../shared/storyboardStructures.js';
 // User prompt template — equivalent of the n8n Storyboard Agent node's "text" (prompt) field.
 // Mirrors the n8n wiring: script fields come from the Scripts search, while
 // niche/platform/character_references/style_references come from the linked
 // Project record ("Get a record" node).
 import { approvedScriptTimeline } from '../../utils/storyboardValidation.js';
 
-export function buildStoryboardPrompt({ scriptRecord, projectRecord }) {
+export function buildStoryboardPrompt({ scriptRecord, projectRecord, brief }) {
   const f = scriptRecord.fields || {};
-  const p = projectRecord?.fields || {};
+  const current = projectRecord?.fields || {};
+  const p = brief ? { ...current, niche: brief.identity.niche, platform: brief.identity.platform, character_references: brief.identity.characterAssets, style_references: brief.identity.styleAssets } : current;
   return `Generate a production-ready storyboard package from the approved script below.
 The script has already been approved.
 Do NOT rewrite, shorten, or improve the script.
@@ -60,5 +63,5 @@ Character References:
 ${JSON.stringify(p.character_references ?? null)}
 
 Style References:
-${JSON.stringify(p.style_references ?? null)}`;
+${JSON.stringify(p.style_references ?? null)}` + guidanceFor('storyboard', brief) + structureSelectionInstruction(brief);
 }

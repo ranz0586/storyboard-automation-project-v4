@@ -190,7 +190,7 @@ export function flattenStoryboard(sbOutput, scriptRecord, projectRecord) {
 
     storyboard_status: 'Generated',
     storyboard_text: JSON.stringify(sbOutput || {}),
-    structure_type: 'Structure 3',
+    structure_type: sb.structure3?.length ? 'Structure 3' : sb.structure2?.length ? 'Structure 2' : 'Structure 1',
 
     character_sheet_prompt: ma.character_sheets ||  ma.character_sheet_prompt ||  ma.character_sheet_prompts || '',
     location_sheet_prompt: ma.location_sheets || ma.location_sheet_prompt || ma.location_sheet_prompts || '',

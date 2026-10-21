@@ -100,7 +100,7 @@ const gemini = { generate: async ({ system, prompt }) => {
     const concept = JSON.parse(prompt.split('CONCEPT TO PROCESS:\n')[1].split('\n')[0]);
     return { scripts: [{ video: { video_id: 'model-id', title: `Script ${concept.title}`, estimated_duration_seconds: 30, voiceover: { full_script: `Narration for ${concept.title}` } }, scenes: [{ scene_number: 1, duration_seconds: 30, narration: concept.title }] }] };
   }
-  if (system === STORYBOARD_SYSTEM) return storyboardReply({ fields: { scenes_json: JSON.parse(prompt.split('Scenes JSON:\n')[1].split('\n\nCharacter References:')[0]) } });
+  if (system.startsWith(STORYBOARD_SYSTEM)) return storyboardReply({ fields: { scenes_json: JSON.parse(prompt.split('Scenes JSON:\n')[1].split('\n\nCharacter References:')[0]) } });
   if (system === SCRIPT_VALIDATION_SYSTEM) return validationReply(scriptFromValidationPrompt(prompt), historyFromValidationPrompt(prompt));
   throw new Error('Unexpected agent');
 } };
@@ -111,7 +111,7 @@ const app = createApp({ authOptions: { secureCookies: false, lockDir: 'data/ui-t
   runStore: store, scheduleStore: schedules,
   rateLimiter: createRateLimiter({ limit: 1000 }), readRateLimiter: createRateLimiter({ limit: 10000 }),
 });
-const clients = { airtable: client, gemini, telegram };
+const clients = { airtable: client, gemini, telegram, briefStore: app.locals.briefStore };
 // Test-only operator hooks never imported by the production server.
 app.post('/__test/fail-script', (_req, res) => { failScript = true; res.json({ ok: true }); });
 app.post('/__test/seed-pagination', (req, res) => {

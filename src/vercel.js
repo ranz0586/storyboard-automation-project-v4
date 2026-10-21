@@ -7,10 +7,11 @@ import { databaseRateLimiter } from './cloud/coordination.js';
 import { config } from './config.js';
 let application, controllers;
 function initialize() {
-  const { db, state, withLock } = cloudContext();
+  const { db, state, withLock, briefStore } = cloudContext();
   controllers = cloudControllers(state, start);
   application = createApp({
     runStore: state,
+    briefStore,
     scheduleStore: controllers.schedules,
     scriptRunController: controllers.scripts,
     ideaRunController: controllers.ideas,

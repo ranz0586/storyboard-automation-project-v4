@@ -3,7 +3,7 @@ import { recoverStateLocks } from '../src/utils/jsonStateFile.js';
 
 try {
   const recovered = recoverStateLocks({
-    files: [config.scheduler.runStatePath, config.scheduler.statePath],
+    files: [config.scheduler.runStatePath, config.scheduler.statePath, config.pipeline.briefStatePath],
     serversStopped: process.argv.includes('--servers-stopped'),
   });
   console.log(JSON.stringify({ recovered }));

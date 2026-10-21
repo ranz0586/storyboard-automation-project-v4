@@ -1,3 +1,4 @@
+import { productionBriefs } from './briefs/briefStore.js';
 import { logger } from './utils/logger.js';
 import { gemini } from './clients/gemini.js';
 import { airtable } from './clients/airtable.js';
@@ -13,7 +14,7 @@ import { RunStore } from './runs/runStore.js';
   const limit = Number(process.argv[2]) > 0 ? Number(process.argv[2]) : 50;
   try {
     const result = await runIdeaRecovery({
-      clients: { gemini: gemini(), airtable: airtable(), telegram: telegram() },
+      clients: { briefStore: productionBriefs(), gemini: gemini(), airtable: airtable(), telegram: telegram() },
       limit,
       runStore: new RunStore({ filePath: config.scheduler.runStatePath }),
     });

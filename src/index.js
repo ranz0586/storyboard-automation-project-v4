@@ -36,7 +36,7 @@ if (config.pipeline.storyboardPollMs > 0) {
   const poller = new StoryboardPoller({
     queue: app.locals.pipelineQueue,
     run: options => runStoryboardPipeline({ ...options, runStore: app.locals.runStore }),
-    makeClients: () => ({ gemini: gemini(), airtable: airtable(), telegram: telegram() }),
+    makeClients: () => ({ briefStore: app.locals.briefStore, gemini: gemini(), airtable: airtable(), telegram: telegram() }),
     onError: (err) => logger.error('Storyboard poll failed', err?.message),
   });
   setInterval(() => {

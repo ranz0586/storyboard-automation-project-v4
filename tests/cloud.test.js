@@ -1,3 +1,8 @@
+import { CloudBriefStore } from '../src/cloud/briefStore.js';
+import { createCloudContext } from '../src/cloud/context.js';
+import { processIdeaScript } from '../src/scriptWorker.js';
+import { SCRIPT_SYSTEM } from '../src/agents/script/system.js';
+import { validationReply, scriptFromValidationPrompt } from './helpers/scriptValidation.js';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -24,7 +29,7 @@ after(async () => {
 });
 async function fixture(work) {
   await pg.exec(
-    'TRUNCATE app_runs,app_schedules,app_sessions,app_leases,app_rate_limits,app_key_slots,app_effects,app_maintenance',
+    'TRUNCATE app_runs,app_schedules,app_sessions,app_leases,app_rate_limits,app_key_slots,app_effects,app_maintenance,app_project_briefs,app_item_briefs',
   );
   const db = {
     query: (...args) => pg.query(...args),
@@ -419,3 +424,47 @@ test('manual cloud pipeline waits through cooldowns, processes only its new idea
     await state.update(early.id, { status: 'INTERRUPTED' });
     assert.deepEqual(await state.create(null, { retryOf: early.id }), { error: 'NO_FAILED_ITEMS' });
   }));
+
+test('cloud output settings and immutable snapshots survive new instances, contention and defaults changes', () => fixture(async db => {
+  const a = new CloudBriefStore(db), b = new CloudBriefStore(db);
+  await a.set('science', { structures: ['structure2'], language: 'English', durationSeconds: 30, characterReferences: 'Blue coat', styleReferences: 'Ink' });
+  const form = { NICHE: 'Science', PLATFORM: 'YouTube', 'TARGET AUDIENCE': 'Original audience' };
+  const [first, racing] = await Promise.all([a.freeze('science', 'video', form), b.freeze('science', 'video', { ...form, NICHE: 'Changed' })]);
+  assert.deepEqual(first, racing);
+  assert.equal(first.language, 'English'); assert.equal(first.durationSeconds, 30); assert.equal(first.characterReferences, 'Blue coat');
+  await b.set('science', { structures: ['structure1'] });
+  assert.equal((await b.defaults('science')).language, 'English');
+  await Promise.all([a.set('science', { language: 'French' }), b.set('science', { durationSeconds: 60 })]);
+  assert.equal((await a.defaults('science')).language, 'French'); assert.equal((await a.defaults('science')).durationSeconds, 60);
+  assert.deepEqual(await new CloudBriefStore(db).freeze('science', 'video', form), first);
+  assert.deepEqual((await b.freeze('science', 'new-video', form)).structures, ['structure1']);
+  assert.equal(await a.get('another-project', 'video'), null);
+  await assert.rejects(a.set('science', { structures: [] }));
+  await pg.exec(await readFile(new URL('../src/cloud/schema.sql', import.meta.url), 'utf8'));
+  assert.deepEqual(await b.get('science', 'video'), first);
+  const legacy = { version: 1, workflow: 'narrated-video', structures: ['structure3'], identity: {}, guidancePacks: [], origin: 'script' };
+  await db.query('INSERT INTO app_item_briefs(project_key,item_id,payload) VALUES($1,$2,$3)', ['science', 'old', legacy]);
+  assert.deepEqual(await new CloudBriefStore(db).freeze('science', 'old', form), legacy);
+  const secured = await db.query("SELECT relrowsecurity FROM pg_class WHERE relname IN ('app_project_briefs','app_item_briefs')");
+  assert.equal(secured.rows.length, 2); assert.ok(secured.rows.every(row => row.relrowsecurity));
+}));
+
+test('cloud replay retains frozen guidance and reuses provider checkpoints after a lost Script save', () => fixture(async db => {
+  let calls = 0, failed = false, saved;
+  const record = { video: { video_id: 'model-id', title: 'Glass experiment', estimated_duration_seconds: 3, voiceover: { full_script: 'This simple experiment reveals how water changes under pressure.' } }, scenes: [{ scene_number: 1, duration_seconds: 3, narration: 'This simple experiment reveals how water changes under pressure.', visual: { description: 'A clear glass.', image_prompt: 'A glass.', video_prompt: 'Watch water.' } }] };
+  const client = { findScriptByVideoId: async () => saved || null, upsertScript: async fields => { if (!failed) { failed = true; throw new Error('Save unavailable'); } return saved = { id: 'recSaved', fields }; } };
+  const options = { db, makeAirtable: () => client, makeTelegram: () => ({}), makeGemini: () => ({ generate: async args => { calls++; return args.system === SCRIPT_SYSTEM ? { scripts: [record] } : validationReply(scriptFromValidationPrompt(args.prompt)); } }) };
+  let context = createCloudContext(options);
+  await context.briefStore.set('science', { structures: ['structure2'], language: 'English', durationSeconds: 30, characterReferences: 'Blue coat', styleReferences: 'Ink' });
+  const args = { idea: { id: 'replayIdea' }, concept: { title: 'Glass' }, form: { NICHE: 'Science', PLATFORM: 'YouTube', 'TARGET AUDIENCE': 'Original audience' }, projectKey: 'science' };
+  await assert.rejects(processIdeaScript({ ...args, ...context.clients('selection-replay'), withLock: context.withLock }), /Save unavailable/);
+  assert.equal(calls, 2);
+  context = createCloudContext(options);
+  await context.briefStore.set('science', { structures: ['structure1'], language: 'French', durationSeconds: 60, characterReferences: 'Red coat' });
+  await processIdeaScript({ ...args, form: { ...args.form, 'TARGET AUDIENCE': 'Changed audience' }, ...context.clients('selection-replay'), withLock: context.withLock });
+  assert.equal(calls, 2);
+  const frozen = await context.briefStore.get('science', 'idea_replayIdea');
+  assert.deepEqual(frozen.structures, ['structure2']); assert.equal(frozen.identity.audience, 'Original audience');
+  assert.equal(frozen.language, 'English'); assert.equal(frozen.durationSeconds, 30); assert.equal(frozen.characterReferences, 'Blue coat');
+  assert.ok(JSON.parse(saved.fields.scenes_json)[0].editorial_review.summary.hook_fulfilled);
+}));

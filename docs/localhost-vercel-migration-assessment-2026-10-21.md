@@ -358,3 +358,7 @@ Identical files need no copy. Different files require selective conflict resolut
 | tests/ytdlp.test.js | Identical |
 | vercel.json | Vercel only |
 | vite.config.js | Identical |
+
+Implementation follow-up — 2026-10-21: output selection and four versioned guidance packs have been ported with narrow output settings and durable local/cloud snapshots. See [details](output-selection-and-guidance.md). This is the requested subset of M2, not the broader brief editor, mixed-duration/dual-timeline migration, auditor or alternate-input batches. Historical inventory/test counts above remain the original comparison snapshot.
+
+Production briefs follow-up — 2026-10-21: the language, target-duration and character/style-description editor is now ported into Vercel Settings, using the existing local/cloud snapshot adapters. Partial defaults writes preserve omitted fields; old item payloads remain immutable. See [Production briefs](production-briefs.md). Auditor, alternate inputs, mixed-duration/dual-timeline migration and held measured-media/analytics remain separate; the original comparison inventory above is historical.

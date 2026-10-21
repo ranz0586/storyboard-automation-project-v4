@@ -1,3 +1,4 @@
+import { productionBriefs } from './briefs/briefStore.js';
 import { logger } from './utils/logger.js';
 import { gemini } from './clients/gemini.js';
 import { airtable } from './clients/airtable.js';
@@ -12,7 +13,7 @@ import { RunStore } from './runs/runStore.js';
 (async () => {
   try {
     const result = await runStoryboardPipeline({
-      clients: { gemini: gemini(), airtable: airtable(), telegram: telegram() },
+      clients: { briefStore: productionBriefs(), gemini: gemini(), airtable: airtable(), telegram: telegram() },
       runStore: new RunStore({ filePath: config.scheduler.runStatePath }),
       source: 'OPERATOR',
     });

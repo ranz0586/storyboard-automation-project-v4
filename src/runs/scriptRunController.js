@@ -17,18 +17,21 @@ function formFrom(project, idea) {
     'CONTENT STYLE': p.content_style || '',
     'CHANNEL NAME (Optional)': p.channel_page_name || '',
     'CHANNEL DESCRIPTION (Optional)': p.description || '',
+    'CHARACTER REFERENCES': p.character_references ?? null,
+    'STYLE REFERENCES': p.style_references ?? null,
     'Has Character Reference Sheet': p.has_character_reference || 'N',
     'Has Style Reference': p.has_style_reference || 'N',
   };
 }
 
 export class ScriptRunController {
-  constructor({ store, queue, makeGemini, makeAirtable, makeTelegram }) {
+  constructor({ store, queue, makeGemini, makeAirtable, makeTelegram, briefStore }) {
     this.store = store;
     this.queue = queue;
     this.makeGemini = makeGemini;
     this.makeAirtable = makeAirtable;
     this.makeTelegram = makeTelegram;
+    this.briefStore = briefStore;
   }
 
   create(input, { source = 'MANUAL' } = {}) {
@@ -109,6 +112,7 @@ export class ScriptRunController {
       clients = {
         airtable: this.makeAirtable(),
         telegram: this.makeTelegram(),
+        briefStore: this.briefStore,
       };
       const project = await clients.airtable.getProject(run.projectId);
       assertProjectActive(project);
@@ -197,7 +201,7 @@ export class ScriptRunController {
         form: formFrom(project, idea),
         projectKey: projectKey(project),
         gemini: clients.gemini,
-        airtable: clients.airtable,
+        airtable: clients.airtable, briefStore: this.briefStore,
       });
       await clients.airtable.updateIdea(idea.id, { 'Idea Status': 'Script Generated' });
       const current = this.store.get(runId);

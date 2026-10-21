@@ -1,3 +1,4 @@
+import { selectedStructures } from '../../shared/storyboardStructures.js';
 import { spokenWords } from './scriptTiming.js';
 import { StoryboardOutputSchema } from '../schemas.js';
 
@@ -7,8 +8,13 @@ const text = value => typeof value === 'string' && value.trim().length > 0;
 // defaults from turning an empty response into a completed production package.
 // Any supported structure can be used; provided frames/panels need actual
 // image/panel and video prompts. References may supply the master assets.
-export function assertUsableStoryboard(output, scriptRecord) {
+export function assertUsableStoryboard(output, scriptRecord, { structures } = {}) {
   const storyboard = StoryboardOutputSchema.parse(output);
+  if (Array.isArray(structures)) {
+    const selected = selectedStructures(structures);
+    if (selected.some(key => !storyboard[key]?.length)) fail('every selected structure is required');
+    if (['structure1', 'structure2', 'structure3'].some(key => storyboard[key]?.length && !selected.includes(key))) fail('unselected structures must not be persisted');
+  }
   let entries = 0;
   for (const name of ['structure1', 'structure2', 'structure3']) {
     for (const [index, item] of (storyboard[name] || []).entries()) {
@@ -24,11 +30,11 @@ export function assertUsableStoryboard(output, scriptRecord) {
   return storyboard;
 }
 
-export function isUsableStoryboardRecord(record, storyboardId, scriptRecord) {
+export function isUsableStoryboardRecord(record, storyboardId, scriptRecord, options) {
   if (!record?.id || record.fields?.storyboard_id !== storyboardId) return false;
   try {
     const output = record.fields.storyboard_text;
-    assertUsableStoryboard(typeof output === 'string' ? JSON.parse(output) : output, scriptRecord);
+    assertUsableStoryboard(typeof output === 'string' ? JSON.parse(output) : output, scriptRecord, options);
     return true;
   } catch {
     return false;

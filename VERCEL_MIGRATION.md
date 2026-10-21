@@ -69,3 +69,7 @@ Run `npm run db:migrate` once DATABASE_URL is configured. Alternatively, execute
 Sources: [Supabase PostgreSQL connection](https://supabase.com/docs/guides/database/connecting-to-postgres), [Supabase API security](https://supabase.com/docs/guides/api/securing-your-api).
 
 Supabase TLS verification uses the bundled public Supabase Root 2021 CA in `src/cloud/supabaseCa.js`; no private key is stored. Certificate and hostname verification remain enabled. Update this public CA if Supabase rotates it.
+
+## Output settings and guidance snapshots
+
+Before deploying this feature, run `npm run db:migrate` with the existing server-only database connection configured. The additive schema creates `app_project_briefs` and `app_item_briefs`, applies RLS/client-access revocations and preserves existing runtime/Airtable content. No new cloud credentials or provider dependency are required. Drain existing generation jobs before switching prompt versions; earlier workers do not understand these snapshots. See [output selection and guidance](docs/output-selection-and-guidance.md) for legacy and rollback behavior.

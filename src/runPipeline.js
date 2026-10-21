@@ -1,3 +1,4 @@
+import { productionBriefs } from './briefs/briefStore.js';
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
 import { gemini } from './clients/gemini.js';
@@ -23,6 +24,7 @@ const sampleForm = {
     const result = await runContentPipeline({
       form: sampleForm,
       clients: {
+        briefStore: productionBriefs(),
         gemini: gemini(),
         airtable: airtable(),
         telegram: telegram(),

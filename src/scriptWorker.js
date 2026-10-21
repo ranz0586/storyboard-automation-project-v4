@@ -1,3 +1,4 @@
+import { draftBrief, formWithBrief } from './briefs/contract.js';
 import { scriptAgent } from './agents/script/index.js';
 import { scriptValidationAgent } from './agents/scriptValidation/index.js';
 import { flattenScript } from './transforms.js';
@@ -38,7 +39,7 @@ export function isUsableScriptRecord(record) {
 // The one authoritative per-idea generation path. Normal runs, recovery,
 // manual runs, and scheduled runs all converge here and remain sequential in
 // their respective controllers.
-export async function processIdeaScript({ idea, concept, form, projectKey, gemini, airtable, withLock = withFileLock }) {
+export async function processIdeaScript({ idea, concept, form, projectKey, gemini, airtable, briefStore, withLock = withFileLock }) {
   const scriptId = scriptIdForIdea(idea);
   while (inFlight.has(scriptId)) await inFlight.get(scriptId);
   const execution = withLock(scriptId, () => processUnlocked({
@@ -48,7 +49,7 @@ export async function processIdeaScript({ idea, concept, form, projectKey, gemin
     form,
     projectKey,
     gemini,
-    airtable,
+    airtable, briefStore,
   }), { directory: config.locks.scriptDir });
   const completion = execution.then(() => undefined, () => undefined);
   inFlight.set(scriptId, completion);
@@ -59,12 +60,14 @@ export async function processIdeaScript({ idea, concept, form, projectKey, gemin
   }
 }
 
-async function processUnlocked({ scriptId, idea, concept, form, projectKey, gemini, airtable }) {
+async function processUnlocked({ scriptId, idea, concept, form, projectKey, gemini, airtable, briefStore }) {
   const existing = await airtable.findScriptByVideoId(scriptId);
   if (isUsableScriptRecord(existing)) {
     return { script: existing, generated: false, updated: false };
   }
 
+  const brief = projectKey && briefStore ? await briefStore.freeze(projectKey, scriptId, form) : draftBrief(form);
+  form = formWithBrief(form, brief);
   const recentContent = await airtable.recentProjectContent?.(projectKey, { excludeIdeaId: idea.id, excludeVideoId: scriptId }) || [];
   let script = await scriptAgent(gemini, { concept, form });
   logger.mem(`script:${scriptId}:generated`);

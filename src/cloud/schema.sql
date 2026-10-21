@@ -16,6 +16,9 @@ CREATE INDEX IF NOT EXISTS app_runs_status ON app_runs((payload->>'status'),crea
 CREATE INDEX IF NOT EXISTS app_sessions_expiry ON app_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS app_rate_limits_expiry ON app_rate_limits(reset_at);
 
+CREATE TABLE IF NOT EXISTS app_project_briefs (project_key text PRIMARY KEY, payload jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS app_item_briefs (project_key text NOT NULL, item_id text NOT NULL, payload jsonb NOT NULL, PRIMARY KEY(project_key,item_id));
+
 -- Runtime state is server-only. No browser/Data API policies are granted.
 -- Supabase's postgres connection can access these tables; public clients cannot.
 DO $runtime_security$
@@ -23,7 +26,7 @@ DECLARE
  runtime_table text;
  client_role text;
 BEGIN
- FOREACH runtime_table IN ARRAY ARRAY['app_runs','app_schedules','app_sessions','app_leases','app_rate_limits','app_key_slots','app_effects','app_maintenance']
+ FOREACH runtime_table IN ARRAY ARRAY['app_runs','app_schedules','app_sessions','app_leases','app_rate_limits','app_key_slots','app_effects','app_maintenance','app_project_briefs','app_item_briefs']
  LOOP
   EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',runtime_table);
   EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC',runtime_table);

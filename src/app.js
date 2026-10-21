@@ -1,3 +1,6 @@
+import { BriefStore, productionBriefs } from './briefs/briefStore.js';
+import { BriefUpdateSchema } from './briefs/contract.js';
+import { DEFAULT_PACKS } from './creativeGuidance/index.js';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +49,7 @@ export function createApp({
   scheduleStore,
   ideaRunController,
   onScriptApproved,
+  briefStore = makeAirtable === airtable && makeGemini === gemini ? productionBriefs() : new BriefStore(),
 } = {}) {
   const app = express();
   const asyncRoute = handler => (req,res,next) => Promise.resolve(handler(req,res,next)).catch(next);
@@ -60,7 +64,7 @@ export function createApp({
     queue,
     makeGemini,
     makeAirtable,
-    makeTelegram,
+    makeTelegram, briefStore,
   });
   const schedules = scheduleStore || new ScheduleStore({ filePath: config.scheduler.statePath });
   const ideaRuns = ideaRunController || new IdeaRunController({
@@ -69,6 +73,7 @@ export function createApp({
     makeGemini,
     makeAirtable,
   });
+  app.locals.briefStore = briefStore;
   app.locals.runStore = store;
   app.locals.pipelineQueue = queue;
   app.locals.scriptRunController = runs;
@@ -114,6 +119,24 @@ export function createApp({
     logger.error(fallback, err?.message);
     return res.status(503).json({ error: fallback });
   };
+
+  app.get('/api/projects/:id/brief', async (req, res) => {
+    try {
+      const project = await makeAirtable().getProject(req.params.id);
+      const key = getField(project.fields, 'project_id');
+      if (!key) return res.status(409).json({ error: 'Project has no project_id' });
+      res.json({ brief: await briefStore.defaults(key), guidancePacks: DEFAULT_PACKS });
+    } catch (err) { return projectError(res, err, 'Storyboard outputs are temporarily unavailable'); }
+  });
+  app.put('/api/projects/:id/brief', validateBody(BriefUpdateSchema), async (req, res) => {
+    try {
+      const project = await makeAirtable().getProject(req.params.id);
+      assertProjectActive(project);
+      const key = getField(project.fields, 'project_id');
+      if (!key) return res.status(409).json({ error: 'Project has no project_id' });
+      res.json({ brief: await briefStore.set(key, req.validatedBody), guidancePacks: DEFAULT_PACKS });
+    } catch (err) { return projectError(res, err, 'Storyboard outputs could not be saved'); }
+  });
 
   app.get('/api/projects', async (req, res) => {
     const query = CollectionPageSchema.safeParse(req.query);
@@ -197,7 +220,11 @@ export function createApp({
     const parsed = ScriptPageSchema.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid script page request' });
     try {
-      return res.json(await makeAirtable().listScriptsForProject(req.params.id, parsed.data));
+      const client = makeAirtable();
+      const project = await client.getProject(req.params.id);
+      const page = await client.listScriptsForProject(req.params.id, parsed.data);
+      const key = getField(project.fields, 'project_id');
+      return res.json({ ...page, scripts: await Promise.all(page.scripts.map(async script => ({ ...script, productionBrief: key ? await briefStore.get(key, script.fields.video_id) : null }))) });
     } catch (err) {
       return projectError(res, err, 'Scripts are temporarily unavailable');
     }

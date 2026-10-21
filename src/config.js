@@ -86,6 +86,7 @@ export const config = {
     maxQueuedPipelines: Number(process.env.PIPELINE_MAX_QUEUED || 10),
   },
   pipeline: {
+    briefStatePath: process.env.BRIEF_STATE_PATH || 'data/briefs.json',
     conceptCount: Number(process.env.IDEA_CONCEPT_COUNT || 10),
     // In-process storyboard poll interval (replaces the n8n Schedule Trigger,
     // 15 min there). 0/unset = off; use `npm run storyboard` + cron instead.
