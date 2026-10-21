@@ -7,6 +7,18 @@ export function extractJson(text) {
 
   let s = String(text).trim();
 
+  // Parse before unwrapping: Markdown fences may be literal JSON string data.
+  try {
+    return JSON.parse(s);
+  } catch { /* Continue with wrapper recovery. */ }
+
+  const wrapped = s.match(/^```(?:json)?\s*([\s\S]*)```$/i);
+  if (wrapped) {
+    try {
+      return JSON.parse(wrapped[1].trim());
+    } catch { /* Preserve recovery for other model reply formats. */ }
+  }
+
   // Strip ```json ... ``` or ``` ... ``` fences.
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();

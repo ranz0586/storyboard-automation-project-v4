@@ -104,3 +104,12 @@ test('does not retry quota or invalid-request errors', async () => {
     assert.equal(attempts, 1);
   }
 });
+
+test('valid JSON containing Markdown fences stays on the primary model', async () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  const value = { concepts: [{ notes: 'Literal ' + fence + 'json {"example":true} ' + fence }] };
+  const { client, calls } = clientFixture(async () => JSON.stringify(value));
+  assert.deepEqual(await client.generate({ prompt: 'input', json: true }), value);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'primary');
+});
