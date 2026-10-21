@@ -128,17 +128,19 @@ test('two standalone storyboard workers share the lock and generate once', async
   try {
     const statePath = path.join(directory, 'provider.json');
     fs.writeFileSync(statePath, JSON.stringify({ script: { id: 'localScript',
-      fields: { video_id: 'local-video', status: 'Approved' } }, generations: 0, writes: 0 }));
+      fields: { video_id: 'local-video', status: 'Approved', estimated_duration_seconds: 3, voiceover_script: 'Follow this experiment.', scenes_json: JSON.stringify([{scene_number:1,duration_seconds:3,narration:'Follow this experiment.'}]) } }, generations: 0, writes: 0 }));
     const worker = path.join(directory, 'worker.mjs');
     const workerModule = new URL('../src/storyboardWorker.js', import.meta.url).href;
+    const fixtureModule = new URL('./helpers/storyboard.js', import.meta.url).href;
     fs.writeFileSync(worker, `import fs from 'node:fs';
 process.env.SCRIPT_LOCK_DIR=${JSON.stringify(path.join(directory, 'locks'))};
 const {processScriptStoryboard}=await import(${JSON.stringify(workerModule)});
+const {storyboardReply}=await import(${JSON.stringify(fixtureModule)});
 const file=${JSON.stringify(statePath)};
 const read=()=>JSON.parse(fs.readFileSync(file)),write=data=>fs.writeFileSync(file,JSON.stringify(data));
 const result=await processScriptStoryboard({scriptRecord:read().script,clients:{
  gemini:{generate:async()=>{const data=read();data.generations++;write(data);await new Promise(r=>setTimeout(r,100));
- return {structure3:[{panel_prompt:'A clear science experiment.',video_prompt:'Follow the science experiment.'}]};}},
+ return storyboardReply(read().script);}},
  airtable:{getScript:async()=>read().script,findStoryboardById:async()=>read().storyboard||null,
  upsertStoryboard:async fields=>{const data=read();data.writes++;data.storyboard={id:'localStoryboard',fields};write(data);return data.storyboard;},
  updateScript:async(_id,fields)=>{const data=read();Object.assign(data.script.fields,fields);write(data);}}

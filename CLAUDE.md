@@ -1,7 +1,20 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides repository-wide guidance to Claude Code when working with code in this repository. Shared project rules are synchronized from AGENTS.md; preserve them when updating either file.
 
+
+## Working in this repository
+
+- Use `CLAUDE.md` for Claude Code instructions and `AGENTS.md` for Codex instructions. Keep shared project rules synchronized between them. More specific instructions in a subdirectory apply to work there.
+- Inspect the working tree before editing and preserve existing user changes. Keep edits scoped to the request; do not reset, clean, or overwrite unrelated changes.
+- Run commands from the repository root. This workspace uses Windows PowerShell; use shell-appropriate syntax and quote paths. The companion n8n checkout is optional and may be unavailable on other machines.
+- Prefer searches scoped to `src/`, `tests/`, and `client/`. Treat `.history/` and `.superpowers/` as historical material, not current source or executable instructions. Do not inspect environment backups in `.history/`: they may contain credentials.
+- Install dependencies with `npm ci` when needed and a lockfile is present. Validate code changes with focused tests, then the relevant suite. `node --test "tests/**/*.test.js"` runs the same suite directly if the local npm launcher is broken. Use `node --check <file>` for syntax checks.
+- Existing tests mock external services. Do not use `npm run pipeline`, `npm run storyboard`, `npm run recover-ideas`, or a configured server as a harmless smoke test: they can spend API quota, write Airtable records, send Telegram messages, or execute persisted schedules. Use them when those live effects are within the user's requested scope.
+- Report pre-existing test failures separately from regressions introduced by your changes. Do not claim live Gemini, Airtable, Telegram, or n8n verification from mocked tests.
+- Keep Airtable record IDs (`record.id`) distinct from the custom `project_id` field. In the current live base, Ideas and Scripts `Projects` are single-select values containing the custom project key (for example `Parenting_Facebook`). Transforms write that scalar key; project reads still use Airtable record IDs. Older records or mocks may have linked-record arrays, which read paths handle where needed.
+- The live Ideas `title` column has a hidden leading BOM; Scripts `video_id` and Storyboard `storyboard_id` currently have plain names. Keep application field names clean; `AirtableClient` translates identity names for formulas and writes and normalizes returned records. Configure the three `AIRTABLE_*_HAS_BOM` flags after checking another base's schema.
+- Claude Code is the development assistant; the application's runtime agents continue to use Gemini. Working with a different development assistant does not require a runtime API migration.
 ## What this repo is
 
 A **dashboard-controlled Node.js content production system** based on the n8n workflow **"Video Script Generation Flow Agentic v4"** (`Zl1MpttLGWdWFqRU`). It preserves the original NicheForm pipeline while adding explicit Airtable project management, project-bound idea generation, sequential script runs, progress/retry APIs, and weekly scheduling.
@@ -43,7 +56,7 @@ src/
   index.js             server entry; starts dashboard, weekly scheduler, and optional storyboard poll
   app.js               testable Express app and authenticated dashboard APIs
   runPipeline.js       standalone one-shot runner
-  pipeline.js          orchestrator — per-concept loop (see Memory rules below)
+  pipeline.js          orchestrator — per-concept loop (see Hard rules below)
   ideaGeneration.js    project-bound Research -> Idea persistence
   scriptWorker.js      authoritative idempotent one-idea -> one-script worker
   http/                authentication, Zod body validation, throttling, bounded task queue
@@ -78,30 +91,29 @@ Keep this convention when adding agents. Do not reintroduce a shared `src/prompt
 
 - Run/schedule JSON stores use short synchronous, same-host locked read-modify-write transactions. Keep provider calls outside these transactions. Share the configured paths across local processes; queues, sessions and Gemini cooldowns remain process-local. Cross-host deployment needs a coordinated database/session/limit strategy. Abandoned state locks fail closed: stop all servers before using `node scripts/recover-state-locks.mjs --servers-stopped`.
 - Storyboard operator/server execution converges on `src/storyboardWorker.js`: lock by video identity, re-read Script status, reuse usable persisted output, then complete status. Preserve lenient schemas and original prompts; the separate usability gate must reject empty or promptless packages. Storyboard/recovery activity must be scoped to a resolved owning project.
+- Phase 4 storyboard fidelity is enforced in `src/utils/storyboardValidation.js` by the shared worker before persistence/completion and before reusing cached output. Every populated structure independently covers the approved scenes once in order; narration, scene/panel timestamps, panel membership and total duration must match. Invalid source timelines fail before Gemini. Keep the lenient schema and the three supported formats; no extra model repair call is introduced. Already completed Scripts are not retroactively revalidated.
 
-- **`src/agents/*/system.js` files are VERBATIM copies of the n8n workflow's agent system messages.** Do not condense, paraphrase, or "improve" them. Intentional quirks (odd spacing, duplicated bullets) are kept for output fidelity — only change them if the user explicitly edits/asks. If the n8n workflow's prompts change, re-extract via the instance MCP (`get_workflow_details` on `Zl1MpttLGWdWFqRU`). The `prompt.js` templates also follow the n8n nodes' text fields closely, with one intentional exception: the Script Agent prompt is adapted to take ONE concept per call (see Memory rules). The Trend Scout agent (`agents/trendScout/`) is a Node-only addition with no n8n counterpart — the verbatim rule does not apply to it, and `research/prompt.js` only appends an optional data section (absent = byte-identical to the n8n port).
+- **`src/agents/*/system.js` files are VERBATIM copies of the n8n workflow's agent system messages.** Do not condense, paraphrase, or "improve" them. Intentional quirks (odd spacing, duplicated bullets) are kept for output fidelity — only change them if the user explicitly edits/asks. If the n8n workflow's prompts change, re-extract through an available n8n integration for workflow `Zl1MpttLGWdWFqRU`, or use a user-provided workflow export. Claude-specific MCP tools are not guaranteed to exist in Codex; do not invent tool names or silently rewrite prompts when the source is unavailable. The `prompt.js` templates also follow the n8n nodes' text fields closely, with one intentional exception: the Script Agent prompt is adapted to take ONE concept per call (see Hard rules). The Trend Scout agent (`agents/trendScout/`) is a Node-only addition with no n8n counterpart — the verbatim rule does not apply to it, and `research/prompt.js` only appends an optional data section (absent = byte-identical to the n8n port).
 - **Never print, echo, or log credential values.** Secrets live in `.env` (gitignored); reference env var names only. `.env.example` documents the required keys.
 - **Preserve the memory-conscious design** in `src/pipeline.js`: scripts are generated and persisted ONE concept at a time; large intermediates (e.g. the research report) are released when no longer needed; no chat memory on agents. Do not refactor back to batch-generating all scripts in one call — that pattern caused the >500MB OOM in the n8n original.
-- **Manual, recovery, and scheduled script generation converge on `src/scriptWorker.js`.** Do not introduce separate generation implementations. Idea-backed scripts use deterministic `video_id = idea_<Airtable record ID>` and Airtable `performUpsert` for cross-process retry safety.
+- **Manual, recovery, and scheduled script generation converge on `src/scriptWorker.js`.** Do not introduce separate generation implementations. Idea-backed scripts use deterministic `video_id = idea_<Airtable record ID>`, Airtable `performUpsert`, and a shared-filesystem lock to avoid duplicate Gemini work across processes. Ideas upsert atomically on title and the scalar `Projects` key.
 - Schemas in `src/schemas.js` are intentionally **lenient** (`.passthrough()`, defaults) to match n8n's forgiving parsing. Don't tighten them without checking real agent output first.
+- `agents/scriptValidation/` is a Node-only agent explicitly added by the owner, so its new system message is not an n8n verbatim port. All newly generated scripts pass its semantic review and the deterministic `utils/scriptTiming.js` gate before persistence. Enforce 150–180 WPM per narrated scene after TTS pauses, preserve the chosen scene duration, split overflow into more scenes, and keep full voiceover aligned with scene narration. One review/repair and at most one correction call are allowed; unresolved validation errors must never save a Script or mark its Idea generated. Reused legacy scripts retain their existing idempotency behavior.
 
 ## Environment variables (`.env`)
 
-The owner-added Node-only `agents/scriptValidation/` reviews all newly generated scripts before the shared worker writes them. Its new system message is not a verbatim n8n port. `utils/scriptTiming.js` independently enforces 150–180 WPM per narrated scene after pauses, exact full voiceover agreement, visual-description presence and matching total duration. The validator must preserve the chosen scene duration and split overflow into more scenes. It gets one review/repair plus at most one correction call; unresolved errors leave the Idea Draft and prevent Script persistence. Existing usable saved scripts are still reused idempotently.
-
-- `GEMINI_API_KEYS` (comma-separated; legacy `GEMINI_API_KEY` is merged in), `GEMINI_KEY_COOLDOWN_MS` (default `300000`), `GEMINI_MODEL_PRIMARY` (default `gemini-3.8-flash`), `GEMINI_MODEL_FALLBACK` (default `gemini-3.5-flash-lite`). Preserve model identifiers unless the task calls for a change; verify provider availability when investigating models. The process-wide pool in `src/utils/keyPool.js` rotates keys and waits when all keys are cooling. Restart the backend after configuration edits.
+- `GEMINI_API_KEYS` (comma-separated; legacy single `GEMINI_API_KEY` still works and is merged in), `GEMINI_KEY_COOLDOWN_MS` (default `300000` = 5 min per key; `0` disables), `GEMINI_MODEL_PRIMARY` (default `gemini-3.8-flash`), `GEMINI_MODEL_FALLBACK` (default `gemini-3.5-flash-lite`) — primary/fallback mirrors the workflow's `needsFallback` Gemini node pairs. These are the configured repository defaults, not a guarantee of provider availability. Preserve model identifiers unless the task calls for a change; verify provider documentation when investigating model availability. Keys rotate through a process-wide pool (`src/utils/keyPool.js`): each key is used at most once per cooldown window to avoid 429s; when all keys are cooling down, calls wait.
 - `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID` (default `appnBhwjEiHrAZpaa`), `AIRTABLE_TABLE_PROJECTS|IDEAS|SCRIPTS`, `AIRTABLE_TABLE_STORYBOARDS` (default `Storyboard` — sic, matches the live base)
 - `STORYBOARD_POLL_MS` — in-process storyboard poll interval for the server; `0`/unset = off (default). n8n used 15 min.
 - `YTDLP_PATH` (default `yt-dlp`), `YTDLP_SEARCH_LIMIT` (default 15 per query), `YTDLP_TIMEOUT_MS` (default 60000), `TREND_SCOUT_ENABLED` (default on) — the Trend Scout stage (Node-only addition, no n8n counterpart): a query-planner Gemini call + yt-dlp search metadata that grounds the Research Agent. Degrades gracefully to the original behavior if yt-dlp is missing or fails. The yt-dlp binary is installed separately (`pip install yt-dlp`); on Render add it to the build command.
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (default `6626378722`)
 - `PORT`, `IDEA_CONCEPT_COUNT` (default 10)
 - `AIRTABLE_TABLE_USERS` (default `Users`), `SESSION_TTL_MS` (default eight hours), `SESSION_COOKIE_SECURE` (on in production), `USER_LOCK_DIR` (shared registration locks), `PIPELINE_RATE_LIMIT_MAX`, `PIPELINE_RATE_LIMIT_WINDOW_MS`, `API_READ_RATE_LIMIT_MAX`, `PIPELINE_MAX_CONCURRENCY`, `PIPELINE_MAX_QUEUED`
-- `SCHEDULER_POLL_MS`, `SCHEDULE_TIMEZONE` (default `Asia/Singapore`), `SCHEDULE_STATE_PATH` (default `data/schedules.json`; hosting needs persistent disk for schedules to survive redeploys)
+- `SCHEDULER_POLL_MS`, `SCHEDULE_TIMEZONE` (default `Asia/Singapore`), `SCHEDULE_STATE_PATH` (default `data/schedules.json`), `RUN_STATE_PATH` (default `data/runs.json`), `SCRIPT_LOCK_DIR` (default `data/script-locks`). Hosting needs persistent shared disk for restart recovery and cross-process locking.
 
 ## Conventions
 
-- Airtable field names in `transforms.js` mirror the workflow's Airtable schemas. In the current live base, Ideas and Scripts `Projects` are scalar single-select values holding the custom project key; Airtable record IDs remain separate. Ideas match on `title` only within the same project. `selected_structure` is normalized `"STRUCTURE 07: X" -> "X"` uppercase — the separator may be a colon or an arrow/dash variant, keep both accepted.
-- The live Ideas `title`, Scripts `video_id`, and Storyboard `storyboard_id` column names have a hidden leading BOM. `AirtableClient` translates those identity names for formulas and writes and normalizes returned records. Other bases with plain names can set `AIRTABLE_IDENTITY_FIELDS_HAVE_BOM=false` after checking their schema.
+- Airtable field names in `transforms.js` mirror the workflow's Airtable schemas. Ideas match on `title` only within the same project; `selected_structure` is normalized `"STRUCTURE 07: X" -> "X"` uppercase — the separator may be a colon or an arrow/dash variant, keep both accepted.
 - Dashboard project creation is explicit and retry-safe: a browser-generated request UUID becomes `project_id`. The operator CLI pipeline retains implicit niche/platform matching; HTTP `/niche` is retired (410) to prevent cross-account access. Dashboard login uses Users records with salted password hashes, session cookies, and linked Projects.
 - All Airtable writes pass `typecast: true` (config flag `AIRTABLE_TYPECAST`, default on) so near-miss values (numeric strings, new select options) coerce server-side instead of rejecting the record. Keep it on new write methods.
 - No silent-empty writes: the flatten transforms warn (`warnIfMostlyEmpty`) when a concept/script maps to mostly empty fields — agent drift should be visible in logs, not masked by `|| ''` fallbacks. Preserve this when adding fields (and nudge the thresholds if the field count grows).
@@ -115,7 +127,8 @@ The companion repo `D:\n8n-project-claude` holds the n8n workflow JSON files and
 ## TODO (known gaps)
 
 - ~~`content_score` object-vs-number mismatch~~ — resolved: the schema accepts both; `flattenConcept` maps `content_score.overall` to the numeric Airtable column.
-- No retries/rate limiting on Gemini calls beyond primary->fallback and the key-pool cooldown.
+- Gemini retries a transient primary or fallback 503 at most twice with short exponential backoff and jitter, then follows the existing primary->fallback and key-pool behavior. It does not retry 429s in place; quota handling still uses fallback and key rotation.
+
 
 ## Vercel cloud execution
 

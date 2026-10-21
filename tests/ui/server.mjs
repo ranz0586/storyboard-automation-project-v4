@@ -7,6 +7,7 @@ import { ScheduleStore } from '../../src/schedules/scheduleStore.js';
 import { createRateLimiter } from '../../src/http/rateLimit.js';
 import { WeeklyScheduler } from '../../src/schedules/weeklyScheduler.js';
 import { runStoryboardPipeline } from '../../src/storyboardPipeline.js';
+import { storyboardReply } from '../helpers/storyboard.js';
 import { runIdeaRecovery } from '../../src/ideaRecoveryPipeline.js';
 import { RESEARCH_SYSTEM } from '../../src/agents/research/system.js';
 import { IDEA_SYSTEM } from '../../src/agents/idea/system.js';
@@ -99,14 +100,13 @@ const gemini = { generate: async ({ system, prompt }) => {
     const concept = JSON.parse(prompt.split('CONCEPT TO PROCESS:\n')[1].split('\n')[0]);
     return { scripts: [{ video: { video_id: 'model-id', title: `Script ${concept.title}`, estimated_duration_seconds: 30, voiceover: { full_script: `Narration for ${concept.title}` } }, scenes: [{ scene_number: 1, duration_seconds: 30, narration: concept.title }] }] };
   }
-  if (system === STORYBOARD_SYSTEM) return { master_assets: {}, structure3: [{ panel_number: 1, scene_number: 1,
-    panel_prompt: 'A cinematic science experiment panel.', video_prompt: 'Track the experiment as water moves.' }] };
+  if (system === STORYBOARD_SYSTEM) return storyboardReply({ fields: { scenes_json: JSON.parse(prompt.split('Scenes JSON:\n')[1].split('\n\nCharacter References:')[0]) } });
   if (system === SCRIPT_VALIDATION_SYSTEM) return validationReply(scriptFromValidationPrompt(prompt), historyFromValidationPrompt(prompt));
   throw new Error('Unexpected agent');
 } };
 const telegram = { errorAlert: async value => { alerts.push({ type: 'error', value }); }, scriptsGeneratedAlert: async value => { alerts.push({ type: 'success', value }); } };
 const store = new RunStore(), schedules = new ScheduleStore();
-const app = createApp({ authOptions: { secureCookies: false, lockDir: 'data/ui-test-user-locks' },
+const app = createApp({ authOptions: { secureCookies: false, lockDir: 'data/ui-test-user-locks', loginRateLimiter: createRateLimiter({ limit: 1000 }) },
   makeAirtable: () => client, makeGemini: () => gemini, makeTelegram: () => telegram,
   runStore: store, scheduleStore: schedules,
   rateLimiter: createRateLimiter({ limit: 1000 }), readRateLimiter: createRateLimiter({ limit: 10000 }),

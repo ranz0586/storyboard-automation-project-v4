@@ -16,6 +16,12 @@ async function createProject(page, name) {
   await page.getByRole('button', { name: 'Create project', exact: true }).click();
   await expect(page.getByRole('heading', { name, exact: true }).last()).toBeVisible();
 }
+async function workspace(page, name) { await page.getByRole('tab', { name, exact: true }).click(); }
+async function manualTools(page) {
+  await workspace(page, 'Ideas');
+  const tools = page.locator('.manual-generation');
+  if (!await tools.evaluate(el => el.open)) await tools.locator('summary').click();
+}
 const state = async request => (await request.get('/__test/state')).json();
 const refresh = page => page.getByRole('button', { name: 'Refresh project', exact: true }).click();
 const stat = (page, label) => page.locator('.stat').filter({ has: page.getByText(label, { exact: true }) }).locator('b');
@@ -26,6 +32,7 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   await register(page, 'workflow-user');
   await createProject(page, 'Workflow project');
   const projectId = (await state(request)).projects.find(project => project.fields.channel_page_name === 'Workflow project').id;
+  await manualTools(page);
   await page.getByLabel('Idea count', { exact: true }).fill('4');
   await page.getByRole('button', { name: 'Generate ideas', exact: true }).click();
   await expect(page.locator('#ideas input[type=checkbox]')).toHaveCount(4);
@@ -35,17 +42,21 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   await request.post('/__test/fail-script');
   await page.locator('#ideas input[type=checkbox]').first().check();
   await page.getByRole('button', { name: 'Generate selected', exact: true }).click();
+  await workspace(page, 'Activity');
   await expect(page.getByText('Simulated provider outage', { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Retry failures', exact: true }).click();
   await expect.poll(async () => (await state(request)).scripts.length).toBe(1);
   await refresh(page);
   await expect(page.locator('#ideas input[type=checkbox]')).toHaveCount(3);
+  await manualTools(page);
   await page.getByLabel('Script count', { exact: true }).fill('1');
   await page.getByRole('button', { name: 'Recover drafts', exact: true }).click();
   await expect.poll(async () => (await state(request)).scripts.length).toBe(2);
   await refresh(page);
+  await workspace(page, 'Activity');
   await expect(page.getByText('SCRIPTS · RECOVERY', { exact: true })).toBeVisible();
 
+  await workspace(page, 'Settings');
   await page.getByLabel('Status', { exact: true }).selectOption('true');
   await page.getByLabel('Day', { exact: true }).selectOption('1');
   await page.getByLabel('Time', { exact: true }).fill('09:00');
@@ -56,6 +67,7 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   expect(scheduled.runs).toHaveLength(1);
   await expect.poll(async () => (await state(request)).scripts.length).toBe(3);
   await refresh(page);
+  await workspace(page, 'Activity');
   await expect(page.getByText('SCRIPTS · SCHEDULED', { exact: true })).toBeVisible();
   await expect(stat(page, 'Scripts')).toHaveText('3');
   await page.screenshot({ path: 'test-results/project-desktop.png', fullPage: true });
@@ -65,6 +77,7 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   await page.setViewportSize({ width: 1280, height: 720 });
 
   // Cursor pagination, approval and downstream storyboard persistence.
+  await workspace(page, 'Scripts');
   await expect(page.locator('#scripts details')).toHaveCount(2);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.locator('#scripts details')).toHaveCount(1);
@@ -76,16 +89,19 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   expect(storyboard.generated).toBe(1);
   await refresh(page);
   await expect(stat(page, 'Storyboards')).toHaveText('1');
+  await workspace(page, 'Activity');
   await expect(page.getByText('STORYBOARD · STORYBOARD_POLL', { exact: true })).toBeVisible();
   await expect(page.locator('#scripts')).not.toContainText('Story Generated');
-  await expect(page.locator('#storyboards details')).toHaveCount(1);
-  await page.locator('#storyboards summary').click();
+  await expect(page.locator('#storyboards > details')).toHaveCount(1);
+  await workspace(page, 'Storyboards');
+  await page.locator('#storyboards > details > summary').click();
   await expect(page.locator('#storyboards')).toContainText('panel');
 
   const recovery = await (await request.post(`/__test/recovery/${projectId}`)).json();
   expect(recovery.recovered).toBe(1);
   await refresh(page);
   await expect(stat(page, 'Scripts')).toHaveText('4');
+  await workspace(page, 'Activity');
   await expect(page.getByText('RECOVERY · OPERATOR', { exact: true })).toBeVisible();
   await expect(page.locator('#ideas input[type=checkbox]')).toHaveCount(0);
   const persisted = await state(request);
@@ -93,12 +109,16 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   expect(persisted.alerts.some(alert => alert.type === 'error')).toBeTruthy();
   expect(persisted.alerts.some(alert => alert.type === 'success')).toBeTruthy();
 
+  await workspace(page, 'Settings');
   await page.getByLabel('Project status', { exact: true }).selectOption('Inactive');
   await page.getByRole('button', { name: 'Save status', exact: true }).click();
+  await manualTools(page);
   await expect(page.getByRole('button', { name: 'Generate ideas', exact: true })).toBeDisabled();
   await expect(page.getByLabel('Status', { exact: true })).toHaveValue('false');
+  await workspace(page, 'Settings');
   await page.getByLabel('Project status', { exact: true }).selectOption('Active');
   await page.getByRole('button', { name: 'Save status', exact: true }).click();
+  await manualTools(page);
   await expect(page.getByRole('button', { name: 'Generate ideas', exact: true })).toBeEnabled();
 
   await createProject(page, 'Empty project');
@@ -130,16 +150,21 @@ test('project switching rejects stale responses and expired sessions clear priva
   const slowId = (await state(request)).projects.find(project => project.fields.channel_page_name === 'Slow project').id;
   await page.route(`**/api/projects/${slowId}`, async route => {
     const response = await route.fetch();
+    const data = await response.json();
+    data.project.fields.niche = 'Stale project metadata';
     await new Promise(resolve => setTimeout(resolve, 800));
-    await route.fulfill({ response }).catch(() => {});
+    await route.fulfill({ json: data }).catch(() => {});
   });
   const nav = page.getByRole('navigation', { name: 'Projects' });
   await nav.getByRole('button', { name: 'Slow project', exact: true }).click();
   await nav.getByRole('button', { name: 'Fast project', exact: true }).click();
-  await expect(page.locator('#projectDetail h3').first()).toHaveText('Fast project');
+  await expect(page.locator('.topbar h2')).toHaveText('Fast project');
   await page.waitForTimeout(1000);
-  await expect(page.locator('#projectDetail h3').first()).toHaveText('Fast project');
+  await expect(page.locator('.topbar h2')).toHaveText('Fast project');
+  await expect(page.locator('.project-meta')).not.toContainText('Stale project metadata');
+  await expect(page.locator('.project-meta')).toContainText('Science');
   await page.route('**/api/script-runs?*', route => route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Please log in' }) }));
+  await workspace(page, 'Activity');
   await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
   await expect(page.locator('#projectDetail')).toHaveCount(0);
@@ -166,9 +191,11 @@ test('read errors can be retried and React renders record text safely', async ({
     if (fail) await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Scripts temporarily unavailable' }) });
     else await route.continue();
   });
+  await workspace(page, 'Scripts');
   await page.getByRole('button', { name: 'Refresh scripts', exact: true }).click();
   await expect(page.locator('#scripts')).toContainText('Scripts temporarily unavailable');
   fail = false;
+  await workspace(page, 'Scripts');
   await page.getByRole('button', { name: 'Refresh scripts', exact: true }).click();
   await expect(page.locator('#scripts')).toContainText('No scripts for this project yet.');
 });
@@ -178,6 +205,7 @@ test('interrupted script runs resume before, during and between items without re
   for (const phase of ['before', 'mid', 'between']) {
     await createProject(page, `Interrupted ${phase}`);
     const project = (await state(request)).projects.find(row => row.fields.channel_page_name === `Interrupted ${phase}`);
+    await manualTools(page);
     await page.getByLabel('Idea count', { exact: true }).fill('2');
     await page.getByRole('button', { name: 'Generate ideas', exact: true }).click();
     await expect(page.locator('#ideas input[type=checkbox]')).toHaveCount(2);
@@ -187,6 +215,7 @@ test('interrupted script runs resume before, during and between items without re
       await expect(page.locator('#ideas input[type=checkbox]')).toHaveCount(1);
     }
     const { run } = await (await request.post(`/__test/interrupted/${project.id}`, { data: { phase } })).json();
+    await workspace(page, 'Activity');
     await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Resume interrupted run' })).toBeVisible();
     if (phase === 'mid') await expect(page.getByText(`Interrupted idea: ${run.interruptedItem}`)).toBeVisible();
@@ -232,6 +261,7 @@ test('manual full pipeline creates ideas and Draft scripts in the selected proje
   await createProject(page, 'Manual pipeline project');
   await page.getByLabel('Pipeline concept count', { exact: true }).fill('1');
   await page.getByRole('button', { name: 'Run full pipeline', exact: true }).click();
+  await workspace(page, 'Scripts');
   await expect(page.locator('#scripts summary')).toContainText('Draft');
   const persisted = await state(request);
   const project = persisted.projects.find(row => row.fields.channel_page_name === 'Manual pipeline project');
@@ -240,5 +270,6 @@ test('manual full pipeline creates ideas and Draft scripts in the selected proje
   expect(scripts).toHaveLength(1);
   expect(persisted.runs.find(row => row.projectId === project.id).status).toBe('COMPLETED');
   expect(persisted.storyboards.filter(row => row.fields.script_id?.includes(scripts[0].id))).toHaveLength(0);
+  await workspace(page, 'Activity');
   await expect(page.getByText('FULL PIPELINE · MANUAL', { exact: true })).toBeVisible();
 });

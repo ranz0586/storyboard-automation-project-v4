@@ -1,0 +1,16 @@
+# Keep historical, generated, private, and tool-owned files out of the project graph.
+/.history/
+/.claude/
+/.vercel/
+/.nitro/
+/.output/
+/.workflow-data/
+/.swc/
+/data/
+/dist/
+/test-results/
+/playwright-report/
+/node_modules/
+/graphify-out/
+/.env*
+*.log

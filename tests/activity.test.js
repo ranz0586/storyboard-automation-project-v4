@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { storyboardReply } from './helpers/storyboard.js';
 import assert from 'node:assert/strict';
 import { RunStore } from '../src/runs/runStore.js';
 import { runStoryboardPipeline } from '../src/storyboardPipeline.js';
@@ -7,10 +8,9 @@ import { runIdeaRecovery } from '../src/ideaRecoveryPipeline.js';
 test('storyboard failures and reused completion persist owned project activity', async () => {
   const store = new RunStore();
   const script = { id: 'recActivityScript', fields: { video_id: 'activity-video',
-    Projects: 'Science', status: 'Approved' } };
+    Projects: 'Science', status: 'Approved', estimated_duration_seconds: 3, voiceover_script: 'Follow this experiment.', scenes_json: JSON.stringify([{scene_number:1,duration_seconds:3,narration:'Follow this experiment.'}]) } };
   let saved, updates = 0;
-  const clients = { gemini: { generate: async () => ({ structure3: [{
-    panel_prompt: 'A science experiment.', video_prompt: 'Follow the experiment.' }] }) },
+  const clients = { gemini: { generate: async () => storyboardReply(script) },
     airtable: { searchScripts: async () => [script], getScript: async () => script,
       findProjectByKey: async () => ({ id: 'recOwned', fields: {} }),
       findStoryboardById: async () => saved,

@@ -34,7 +34,7 @@ test('creative instructions preserve all sixteen structures without universal la
   assert.doesNotMatch(SCRIPT_SYSTEM, /targeting US audience|must NEVER be a static|MUST feature human emotion/);
   for (const system of [SCRIPT_SYSTEM, SCRIPT_VALIDATION_SYSTEM]) assert.match(system, /CTAs are optional/);
   assert.match(STORYBOARD_SYSTEM, /endings without a CTA/);
-  assert.match(buildStoryboardPrompt({ scriptRecord: { fields: {} } }), /never add a CTA absent/);
+  assert.match(buildStoryboardPrompt({ scriptRecord: { fields: { scenes_json: JSON.stringify([{scene_number:1,duration_seconds:3,narration:'An opening'}]), voiceover_script:'An opening', estimated_duration_seconds:3 } } }), /never add a CTA absent/);
   for (const count of [1, 3, 10, 50]) assert.match(buildIdeaPrompt({ research: {}, count }), new RegExp('Exactly ' + count + ' content concepts'));
 });
 test('canonical observations exclude hallucinated measurements and classify all model analysis as unverified', async () => {

@@ -18,9 +18,9 @@ test('storyboard poll can scope approved scripts to one project key', async () =
 
 const approved = {
   id: 'recScript1',
-  fields: { video_id: 'video-1', title: 'Approved', status: 'Approved' },
+  fields: { video_id: 'video-1', title: 'Approved', status: 'Approved', estimated_duration_seconds: 3, voiceover_script: 'Water refracts light through a glass.', scenes_json: JSON.stringify([{scene_number:1,duration_seconds:3,narration:'Water refracts light through a glass.'}]) },
 };
-const valid = { master_assets: {}, structure1: [{ image_prompt: 'Water refracts light through a glass.', video_prompt: 'Track the light moving through water.' }] };
+const valid = { master_assets: {}, structure1: [{ frame: '1', timestamp: '00:00 - 00:03', narration: 'Water refracts light through a glass.', image_prompt: 'Water refracts light through a glass.', video_prompt: 'Track the light moving through water.' }] };
 const reads = { getScript: async () => structuredClone(approved), findStoryboardById: async () => null };
 
 test('storyboard pipeline persists an omitted structure3 safely and completes the script', async () => {
