@@ -106,3 +106,17 @@ test('history failures stop new generation instead of silently approving blind o
   await assert.rejects(processIdeaScript({idea:{id:'recPhase3HistoryFailure'},concept:{},form,projectKey:'science',gemini:{generate:async()=>{calls++;}},airtable:{findScriptByVideoId:async()=>null,recentProjectContent:async()=>{throw Error('History unavailable');},upsertScript:async()=>{writes++;}}}),/History unavailable/);
   assert.equal(calls,0);assert.equal(writes,0);
 });
+
+
+test('missing speculative framing does not falsely report a sensitive claim', async () => {
+  const candidate = script('Water changes state when pressure changes around it.');
+  await assert.rejects(scriptValidationAgent({ generate: async () => reply(candidate) }, { script: candidate, concept: {}, form }), error => {
+    assert.match(error.message, /speculation must be explicit in the narration/);
+    assert.doesNotMatch(error.message, /sensitive factual advice/);
+    return true;
+  });
+  const sensitive = script();
+  await assert.rejects(scriptValidationAgent({ generate: async () => {
+    const result = reply(sensitive); result.scene_reviews[0].sensitive_claim = true; return result;
+  } }, { script: sensitive, concept: {}, form }), /sensitive claims require factual source support/);
+});

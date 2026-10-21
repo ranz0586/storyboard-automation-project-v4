@@ -24,8 +24,10 @@ export function inspectEditorialReview(script, reviews, editorial, concept, rece
     if (review.sensitive_claim && type !== 'factual') issues.push('Scene ' + scene.scene_number + ': sensitive claims require factual source support');
     if (type === 'unsupported') issues.push('Scene ' + scene.scene_number + ': unsupported factual claim');
     if (type === 'silent' && normalized(scene.narration)) issues.push('Scene ' + scene.scene_number + ': narrated claims cannot be marked silent');
-    if (type === 'hypothesis' && (!/\b(may|might|could|perhaps|possibly|hypothesis|imagine|suppose|what if)\b/i.test(scene.narration) || review.sensitive_claim))
-      issues.push('Scene ' + scene.scene_number + ': speculation must be explicit and cannot disguise sensitive factual advice');
+    if (type === 'hypothesis' && !/\b(may|might|could|perhaps|possibly|hypothesis|imagine|suppose|what if)\b/i.test(scene.narration))
+      issues.push('Scene ' + scene.scene_number + ': speculation must be explicit in the narration; classify direct assertions and instructions honestly instead of labeling them hypotheses');
+    if (type === 'hypothesis' && review.sensitive_claim)
+      issues.push('Scene ' + scene.scene_number + ': speculation cannot disguise sensitive factual advice');
     if (type === 'factual' || type === 'metadata') {
       if (!review.support_matches_claim || !review.supports.length) issues.push('Scene ' + scene.scene_number + ': factual claims need relevant supplied evidence');
       for (const support of review.supports) {

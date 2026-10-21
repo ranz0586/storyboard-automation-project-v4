@@ -275,3 +275,30 @@ test('under-length review receives expansion guidance and a pause-aware correcti
   assert.equal(calls, 2);
   assert.equal(inspectScriptTiming(result).issues.length, 0);
 });
+
+
+test('correction retains original duration and pause-aware budgets after a review stretches scenes', async () => {
+  const initial = script([scene(1, Array(11).fill('water').join(' '))]);
+  initial.scenes[0].tts.pause_after_ms = 100;
+  const stretched = script([scene(1, Array(12).fill('water').join(' '), 5)]);
+  stretched.scenes[0].tts.pause_after_ms = 100;
+  const repaired = script([scene(1, 'Watch the water carefully inside this clear chamber.')]);
+  repaired.scenes[0].tts.pause_after_ms = 100;
+  let calls = 0;
+  const result = await scriptValidationAgent({ generate: async ({ prompt }) => {
+    calls++;
+    const check = JSON.parse(prompt.split('DETERMINISTIC TIMING CHECK (word budgets account for before/after pauses):\n')[1].split('\n\nPREVIOUS VALIDATION ISSUES TO RESOLVE:')[0]);
+    assert.equal(check.required_scene_duration_seconds, 3);
+    assert.equal(check.repair_budgets[0].duration_seconds, 3);
+    assert.equal(check.repair_budgets[0].min_words, 8);
+    assert.equal(check.repair_budgets[0].max_words, 8);
+    if (calls === 1) return reply(stretched);
+    assert.equal(scriptFromValidationPrompt(prompt).scenes[0].duration_seconds, 5);
+    assert.match(prompt, /expand under-length narration/);
+    assert.match(prompt, /Preserve the chosen scene duration of 3 seconds/);
+    return reply(repaired);
+  } }, { ...context, script: initial });
+  assert.equal(calls, 2);
+  assert.equal(result.scenes[0].duration_seconds, 3);
+  assert.equal(inspectScriptTiming(result).issues.length, 0);
+});

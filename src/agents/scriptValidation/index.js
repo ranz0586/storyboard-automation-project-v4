@@ -48,7 +48,7 @@ export async function scriptValidationAgent(gemini, { script, concept, form, rec
     const parsed = ValidationOutputSchema.safeParse(normalizeReview(await gemini.generate({
       system: SCRIPT_VALIDATION_SYSTEM,
       prompt: buildScriptValidationPrompt({ script: candidate, concept, form,
-        timing: inspectScriptTiming(candidate), feedback, recentContent }),
+        timing: inspectScriptTiming(candidate), originalDuration, feedback, recentContent }),
       json: true,
     })));
     if (!parsed.success) {
@@ -64,7 +64,7 @@ export async function scriptValidationAgent(gemini, { script, concept, form, rec
     else if (result.issues.length) feedback.push(...result.issues);
     if (candidate.video.video_id !== script.video.video_id) feedback.push('Validation must preserve the script video_id');
     if (originalDuration > 0 && candidate.scenes.some(scene => Math.abs(scene.duration_seconds - originalDuration) > 0.01)) {
-      feedback.push('Preserve the chosen scene duration; shorten narration or add scenes instead of stretching scenes');
+      feedback.push(`Preserve the chosen scene duration of ${originalDuration} seconds; expand under-length narration, shorten over-length narration or add scenes instead of stretching scenes`);
     }
     const reviews = result.scene_reviews;
     if (reviews.length !== candidate.scenes.length || new Set(reviews.map(review => review.scene_number)).size !== reviews.length) {
