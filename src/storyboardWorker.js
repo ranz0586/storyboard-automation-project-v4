@@ -10,7 +10,7 @@ import { assertUsableStoryboard, isUsableStoryboardRecord, approvedScriptTimelin
 // Shared by server polls and operator runs. The lock covers fresh lifecycle
 // reads, generation, persistence and completion, including retries after an
 // ambiguous write or a failed Script status update.
-export async function processScriptStoryboard({ scriptRecord, clients, onStart, briefStore = clients.briefStore, withLock = withFileLock, auditStore = clients.auditStore }) {
+export async function processScriptStoryboard({ scriptRecord, clients, onStart, briefStore = clients.briefStore, withLock = withFileLock, auditStore = clients.auditStore, onAuditPending }) {
   const { airtable, gemini } = clients;
   const storyboardId = scriptRecord.fields.video_id;
   if (typeof storyboardId !== 'string' || !storyboardId.trim()) {
@@ -45,7 +45,13 @@ export async function processScriptStoryboard({ scriptRecord, clients, onStart, 
       saved = await airtable.upsertStoryboard(flattenStoryboard(output, script, project));
       generated = true;
     }
-    if(auditStore && await auditStore.enrollment(project.id,script.id))await pendingAuditIntent({auditStore,projectRecord:project,scriptRecord:script,storyboardRecord:saved,briefStore});
+    if(auditStore && await auditStore.enrollment(project.id,script.id)){
+      const audit=await pendingAuditIntent({auditStore,projectRecord:project,scriptRecord:script,storyboardRecord:saved,briefStore});
+      if(audit.status==='PENDING'&&onAuditPending){
+        try{await onAuditPending(audit);}
+        catch(error){if(error.code==='DEFERRED')throw error;logger.warn('Audit intent saved; dispatch deferred to reconciliation');}
+      }
+    }
     await airtable.updateScript(script.id, { status: 'Story Generated' });
     if(auditStore)await auditStore.completeGeneration(project.id,script.id);
     return { scriptId: script.id, storyboardId: saved.id, generated, skipped: false };

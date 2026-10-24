@@ -159,3 +159,17 @@ test('audit APIs keep legacy opt-in, cross-project ownership and oversized audit
  const a=await audits.pending({enrollment:await audits.enrollment(project.id,script.id),input:changed});const calls=f.calls;await executeAudit(f.context,a.id,'oversized');assert.equal((await audits.get(a.id)).errorCode,'AUDIT_INPUT_TOO_LARGE');assert.equal(f.calls,calls);assert.equal(script.fields.status,'Story Generated');assert.equal(f.boards.length,1);
  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
+
+test('storyboard save hands the persisted audit to dispatch before Script completion, even with an older maintenance owner',async()=>{
+ await reset();await db.query("INSERT INTO app_maintenance(id,owner,updated_at) VALUES('main','older-live-owner',now()) ON CONFLICT(id) DO UPDATE SET owner=EXCLUDED.owner,updated_at=now()");
+ const f=fixture(),j=await job();await executeCreation(f.context,j.id,'actor');const s=f.scripts[0];s.fields.status='Approved';const dispatched=[];
+ await processScriptStoryboard({scriptRecord:s,clients:f.c,withLock:f.context.withLock,onAuditPending:async audit=>{assert.equal(s.fields.status,'Approved');assert.equal(f.boards.length,1);assert.equal((await audits.get(audit.id)).status,'PENDING');dispatched.push(audit.id);}});
+ assert.deepEqual(dispatched,[(await audits.latest(project.id,s.id)).id]);assert.equal(s.fields.status,'Story Generated');
+});
+test('failed immediate audit dispatch retains saved content and cron reconciles without relying on maintenance ownership',async()=>{
+ await reset();const {CloudState}=await import('../src/cloud/state.js');const {cloudControllers}=await import('../src/cloud/controllers.js');const f=fixture(),j=await job();await executeCreation(f.context,j.id,'actor');const s=f.scripts[0];s.fields.status='Approved';
+ await processScriptStoryboard({scriptRecord:s,clients:f.c,withLock:f.context.withLock,onAuditPending:async()=>{throw Error('queue unavailable');}});
+ assert.equal(s.fields.status,'Story Generated');const a=await audits.latest(project.id,s.id);assert.equal(a.status,'PENDING');const starts=[];
+ await cloudControllers(new CloudState(db),async(fn,args)=>{starts.push(args);return {runId:'new'};},{productionContext:f.context,inspectWorkflow:()=>({exists:true,status:'running'})}).reconcile();
+ assert.ok(starts.some(args=>args[0]==='AUDIT'&&args[1]===a.id));assert.equal(f.boards.length,1);assert.equal(f.scripts.length,1);
+});

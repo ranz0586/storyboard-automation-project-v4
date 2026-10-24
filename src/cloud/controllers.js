@@ -1,6 +1,7 @@
-import { contentRunWorkflow, weeklyScheduleWorkflow, maintenanceWorkflow } from './workflows.js';
+import { reconcileProduction } from './productionWork.js';
+import { contentRunWorkflow, weeklyScheduleWorkflow, maintenanceWorkflow, productionWorkflow } from './workflows.js';
 import { getRun } from 'workflow/api';
-export function cloudControllers(state, startWorkflow, { inspectWorkflow = getRun } = {}) {
+export function cloudControllers(state, startWorkflow, { inspectWorkflow = getRun, productionContext } = {}) {
   const dispatch = async (run) => {
     if (!run || (run.error && !run.id)) return run;
     try {
@@ -49,6 +50,8 @@ export function cloudControllers(state, startWorkflow, { inspectWorkflow = getRu
     return result;
   };
   const reconcile = async () => {
+    // Cron uses current code even when an older maintenance Workflow still owns its lease.
+    if (productionContext) await reconcileProduction(productionContext, (kind, id) => startWorkflow(productionWorkflow, [kind, id]), inspectWorkflow);
     for (const run of await state.queued()) await dispatch(run);
     for (const schedule of await state.listSchedules()) {
       if (schedule.workflowId) {

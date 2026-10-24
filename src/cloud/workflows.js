@@ -132,6 +132,7 @@ async function executeItem(id, itemId, type) {
           scriptRecord: script,
           clients: c,
           withLock,
+          onAuditPending: audit => start(productionWorkflow, ['AUDIT', audit.id]),
         });
         await state.addItem(id, {
           scriptId: itemId,

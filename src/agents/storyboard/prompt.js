@@ -9,6 +9,8 @@ import { approvedScriptTimeline } from '../../utils/storyboardValidation.js';
 
 export function buildStoryboardPrompt({ scriptRecord, projectRecord, brief }) {
   const f = scriptRecord.fields || {};
+  const scenes = typeof f.scenes_json === 'string' ? JSON.parse(f.scenes_json) : f.scenes_json;
+  const states = (scenes || []).filter(scene => typeof scene.visual?.initial_state === 'string' && scene.visual.initial_state.trim()).map(scene => ({ scene_number: scene.scene_number, initial_state: scene.visual.initial_state, motion: scene.visual.motion, final_state: scene.visual.final_state }));
   const current = projectRecord?.fields || {};
   const p = brief ? { ...current, niche: brief.identity.niche, platform: brief.identity.platform, character_references: brief.identity.characterAssets, style_references: brief.identity.styleAssets } : current;
   return `Generate a production-ready storyboard package from the approved script below.
@@ -30,6 +32,9 @@ Preserve every spoken word, including silence in intentionally silent scenes. Do
 APPROVED SCENE TIMELINE (seconds, authoritative data):
 ${JSON.stringify(approvedScriptTimeline(scriptRecord))}
 
+
+APPROVED VISUAL STATE MAP (authoritative opening, motion, ending):
+${JSON.stringify(states)}
 
 ## Script Information
 

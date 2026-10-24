@@ -1,3 +1,4 @@
+import { OPENING_FRAME_CONTRACT } from '../../creativeGuidance/index.js';
 import { STRUCTURE_KEYS, selectedStructures, structureSelectionInstruction } from '../../../shared/storyboardStructures.js';
 import { STORYBOARD_SYSTEM } from './system.js';
 import { buildStoryboardPrompt } from './prompt.js';
@@ -8,7 +9,7 @@ import { StoryboardOutputSchema } from '../../schemas.js';
 // produces a production package.
 export async function storyboardAgent(gemini, { scriptRecord, projectRecord, brief }) {
   const raw = await gemini.generate({
-    system: STORYBOARD_SYSTEM + structureSelectionInstruction(brief),
+    system: STORYBOARD_SYSTEM + structureSelectionInstruction(brief) + OPENING_FRAME_CONTRACT,
     prompt: buildStoryboardPrompt({ scriptRecord, projectRecord, brief }),
     json: true,
   });

@@ -14,7 +14,7 @@ async function dispatchProduction(kind,job){
 }
 function initialize() {
   const { db, state, withLock, briefStore, productionStore, auditStore } = cloudContext();
-  controllers = cloudControllers(state, start);
+  controllers = cloudControllers(state, start, { productionContext: cloudContext() });
   application = createApp({
     runStore: state,
     productionStore, auditStore,
