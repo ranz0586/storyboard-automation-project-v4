@@ -1,3 +1,4 @@
+import { productionWorkflow, maintenanceWorkflow } from './cloud/workflows.js';
 import { timingSafeEqual } from 'node:crypto';
 import { start } from 'workflow/api';
 import { createApp } from './app.js';
@@ -6,11 +7,19 @@ import { cloudControllers } from './cloud/controllers.js';
 import { databaseRateLimiter } from './cloud/coordination.js';
 import { config } from './config.js';
 let application, controllers;
+async function dispatchProduction(kind,job){
+  if(!job||!['QUEUED','PENDING'].includes(job.status))return;
+  try{await start(productionWorkflow,[kind,job.id]);}catch{}
+  try{await start(maintenanceWorkflow,[]);}catch{}
+}
 function initialize() {
-  const { db, state, withLock, briefStore } = cloudContext();
+  const { db, state, withLock, briefStore, productionStore, auditStore } = cloudContext();
   controllers = cloudControllers(state, start);
   application = createApp({
     runStore: state,
+    productionStore, auditStore,
+    dispatchCreation:job=>dispatchProduction('CREATION',job),
+    dispatchAudit:job=>dispatchProduction('AUDIT',job),
     briefStore,
     scheduleStore: controllers.schedules,
     scriptRunController: controllers.scripts,

@@ -1,3 +1,4 @@
+import { creationGuidance } from '../../creation/contract.js';
 import { guidanceFor } from '../../creativeGuidance/index.js';
 // User prompt template — equivalent of the n8n Script Agent node's "text" (prompt) field.
 // Divergence from n8n: the original fed ALL concepts in one call; this builds the
@@ -53,5 +54,5 @@ has EXACTLY this top-level structure (this mirrors the required Airtable schema)
     "metadata": { "seo_keywords": [], "viral_triggers": [] }
   },
   "scenes": [ <scene objects exactly as specified in the SCENE JSON section> ]
-}` + guidanceFor('script', form['PRODUCTION BRIEF']);
+}` + guidanceFor('script', form['PRODUCTION BRIEF']) + creationGuidance(form['PRODUCTION BRIEF']);
 }

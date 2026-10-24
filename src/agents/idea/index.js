@@ -5,6 +5,7 @@ import { IdeaOutputSchema } from '../../schemas.js';
 
 // Replicates the "Idea Agent" node (with Structured Output Parser2).
 export async function ideaAgent(gemini, { research, count = 10, recentContent = [] }) {
+  if (!Number.isInteger(count) || count < 1) throw new Error('Idea count must be a positive integer');
   const raw = await gemini.generate({
     system: IDEA_SYSTEM,
     prompt: buildIdeaPrompt({ research, count, recentContent }),

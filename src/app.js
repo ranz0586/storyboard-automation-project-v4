@@ -1,3 +1,4 @@
+import { mountProductionRoutes } from './cloud/productionRoutes.js';
 import { BriefStore, productionBriefs } from './briefs/briefStore.js';
 import { BriefUpdateSchema } from './briefs/contract.js';
 import { DEFAULT_PACKS } from './creativeGuidance/index.js';
@@ -49,6 +50,7 @@ export function createApp({
   scheduleStore,
   ideaRunController,
   onScriptApproved,
+  productionStore, auditStore, dispatchCreation, dispatchAudit,
   briefStore = makeAirtable === airtable && makeGemini === gemini ? productionBriefs() : new BriefStore(),
 } = {}) {
   const app = express();
@@ -81,7 +83,8 @@ export function createApp({
   app.locals.ideaRunController = ideaRuns;
 
   app.set('trust proxy', 1);
-  app.use(express.json());
+  const json=express.json();
+  app.use((req,res,next)=>productionStore&&req.method==='POST'&&/^\/api\/projects\/[^/]+\/creation-jobs$/.test(req.path)?next():json(req,res,next));
   app.use(express.urlencoded({ extended: true }));
 
   const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -119,6 +122,8 @@ export function createApp({
     logger.error(fallback, err?.message);
     return res.status(503).json({ error: fallback });
   };
+
+  if(productionStore)mountProductionRoutes(app,{store:productionStore,auditStore,briefStore,makeAirtable,dispatchCreation,dispatchAudit});
 
   app.get('/api/projects/:id/brief', async (req, res) => {
     try {
@@ -189,7 +194,7 @@ export function createApp({
       const client = makeAirtable();
       const project = await client.getProject(req.params.id);
       const stats = await client.projectStats([project.fields.project_id]);
-      return res.json({ project: { ...project, stats: stats[project.fields.project_id] } });
+      return res.json({ project: { ...project, capabilities: {creation:!!productionStore}, stats: stats[project.fields.project_id] } });
     } catch (err) {
       if (err?.statusCode === 404 || err?.status === 404) {
         return res.status(404).json({ error: 'Project not found' });
@@ -403,6 +408,8 @@ export function createApp({
 
   app.use((error,req,res,next) => {
     if (res.headersSent) return next(error);
+    if(error.type==='entity.too.large')return res.status(413).json({error:'Request exceeds the supported size'});
+    if(error.type==='entity.parse.failed')return res.status(400).json({error:'Invalid JSON request'});
     res.status(503).json({error:'Service is temporarily unavailable'});
   });
   return app;

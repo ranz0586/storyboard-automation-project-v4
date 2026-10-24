@@ -31,7 +31,9 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   page.on('pageerror', error => errors.push(error.message));
   await register(page, 'workflow-user');
   await createProject(page, 'Workflow project');
-  const projectId = (await state(request)).projects.find(project => project.fields.channel_page_name === 'Workflow project').id;
+  const projectRecord = (await state(request)).projects.find(project => project.fields.channel_page_name === 'Workflow project');
+  const projectId = projectRecord.id;
+  const projectScripts = async () => (await state(request)).scripts.filter(script => script.fields.Projects === projectRecord.fields.project_id);
   await manualTools(page);
   await page.getByLabel('Idea count', { exact: true }).fill('4');
   await page.getByRole('button', { name: 'Generate ideas', exact: true }).click();
@@ -45,13 +47,13 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   await workspace(page, 'Activity');
   await expect(page.getByText('Simulated provider outage', { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Retry failures', exact: true }).click();
-  await expect.poll(async () => (await state(request)).scripts.length).toBe(1);
+  await expect.poll(async () => (await projectScripts()).length).toBe(1);
   await refresh(page);
   await expect(page.locator('#ideas input[type=checkbox]')).toHaveCount(3);
   await manualTools(page);
   await page.getByLabel('Script count', { exact: true }).fill('1');
   await page.getByRole('button', { name: 'Recover drafts', exact: true }).click();
-  await expect.poll(async () => (await state(request)).scripts.length).toBe(2);
+  await expect.poll(async () => (await projectScripts()).length).toBe(2);
   await refresh(page);
   await workspace(page, 'Activity');
   await expect(page.getByText('SCRIPTS · RECOVERY', { exact: true })).toBeVisible();
@@ -65,7 +67,7 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   await expect(page.getByText('Schedule saved', { exact: true })).toBeVisible();
   const scheduled = await (await request.post('/__test/scheduler')).json();
   expect(scheduled.runs).toHaveLength(1);
-  await expect.poll(async () => (await state(request)).scripts.length).toBe(3);
+  await expect.poll(async () => (await projectScripts()).length).toBe(3);
   await refresh(page);
   await workspace(page, 'Activity');
   await expect(page.getByText('SCRIPTS · SCHEDULED', { exact: true })).toBeVisible();
@@ -105,7 +107,7 @@ test('complete dashboard lifecycle uses existing generation and persistence path
   await expect(page.getByText('RECOVERY · OPERATOR', { exact: true })).toBeVisible();
   await expect(page.locator('#ideas input[type=checkbox]')).toHaveCount(0);
   const persisted = await state(request);
-  expect(new Set(persisted.scripts.map(script => script.fields.video_id)).size).toBe(4);
+  expect(new Set(persisted.scripts.filter(script => script.fields.Projects === projectRecord.fields.project_id).map(script => script.fields.video_id)).size).toBe(4);
   expect(persisted.alerts.some(alert => alert.type === 'error')).toBeTruthy();
   expect(persisted.alerts.some(alert => alert.type === 'success')).toBeTruthy();
 

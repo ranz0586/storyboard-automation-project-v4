@@ -1,3 +1,5 @@
+> Historical assessment: for the current worktrees, completed ports and updated two-way merge plan, see [the 2026-10-22 comparison](v4-functional-parity-comparison-2026-10-22.md).
+
 Selective migration assessment — localhost version-4 ↔ Vercel v4
 
 Assessment date: **2026-10-21, Asia/Singapore**. **Plan only:** no application source edits, merges, commits, deployment, DB migration or live provider calls. Vercel's proposed Phase 5 (measured audio/media and analytics) remains on hold.

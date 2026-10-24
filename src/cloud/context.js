@@ -1,3 +1,5 @@
+import { CloudProductionStore } from './productionStore.js';
+import { CloudAuditStore } from './auditStore.js';
 import { CloudBriefStore } from './briefStore.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
@@ -29,6 +31,7 @@ export function createCloudContext({
     for (const check of guards.getStore() || []) check();
   };
   const briefStore = new CloudBriefStore(db, guard);
+  const productionStore=new CloudProductionStore(db,guard), auditStore=new CloudAuditStore(db,guard);
   const keyPool = new DatabaseKeyPool(db, config.gemini.apiKeys, config.gemini.keyCooldownMs);
   const clients = (namespace) => {
     let provider;
@@ -87,7 +90,7 @@ export function createCloudContext({
       guard();
       return state.saveEffect(id, value);
     };
-    return { gemini, airtable: client, telegram: makeTelegram(), search, briefStore };
+    return { gemini, airtable: client, telegram: makeTelegram(), search, briefStore, auditStore };
   };
   const withSlot = async (work) => {
     for (let slot = 0; slot < config.server.maxConcurrentPipelines; slot++) {
@@ -103,5 +106,5 @@ export function createCloudContext({
     }
     throw new DeferredError('Pipeline capacity is busy');
   };
-  return { db, state, withLock, withSlot, clients, briefStore };
+  return { db, state, withLock, withSlot, clients, briefStore, productionStore, auditStore };
 }

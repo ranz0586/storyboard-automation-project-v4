@@ -19,10 +19,10 @@ export class BriefStore {
   get(projectKey, itemId) {
     return this.state.transaction(state => structuredClone(state.items[JSON.stringify([projectKey, itemId])] || null));
   }
-  freeze(projectKey, itemId, form, origin = 'script') {
+  freeze(projectKey, itemId, form, origin = 'script', creation) {
     return this.state.transaction(state => {
       const key = JSON.stringify([projectKey, itemId]);
-      if (!state.items[key]) state.items[key] = snapshotBrief(projectKey, itemId, form, state.projects[JSON.stringify([projectKey])] || {}, origin);
+      if (!state.items[key]) state.items[key] = snapshotBrief(projectKey, itemId, form, state.projects[JSON.stringify([projectKey])] || {}, origin, creation);
       return structuredClone(state.items[key]);
     });
   }

@@ -1,6 +1,7 @@
 import { selectedStructures } from '../../shared/storyboardStructures.js';
 import { spokenWords } from './scriptTiming.js';
 import { StoryboardOutputSchema } from '../schemas.js';
+import { readStoryboard } from '../../client/src/storyboard.js';
 
 const text = value => typeof value === 'string' && value.trim().length > 0;
 
@@ -9,7 +10,13 @@ const text = value => typeof value === 'string' && value.trim().length > 0;
 // Any supported structure can be used; provided frames/panels need actual
 // image/panel and video prompts. References may supply the master assets.
 export function assertUsableStoryboard(output, scriptRecord, { structures } = {}) {
-  const storyboard = StoryboardOutputSchema.parse(output);
+  const raw = structuredClone(output);
+  if (Array.isArray(raw?.structure1)) raw.structure1 = raw.structure1.map(item => {
+    const prompts = ['image_prompt', 'first_frame_prompt', 'panel_prompt'].map(key => item?.[key]).filter(text);
+    if (prompts.some(prompt => normalizedText(prompt) !== normalizedText(prompts[0]))) fail('Structure 1 image prompt aliases conflict');
+    return { ...item, ...(prompts.length ? { image_prompt: prompts[0] } : {}) };
+  });
+  const storyboard = StoryboardOutputSchema.parse(raw);
   if (Array.isArray(structures)) {
     const selected = selectedStructures(structures);
     if (selected.some(key => !storyboard[key]?.length)) fail('every selected structure is required');
@@ -33,8 +40,11 @@ export function assertUsableStoryboard(output, scriptRecord, { structures } = {}
 export function isUsableStoryboardRecord(record, storyboardId, scriptRecord, options) {
   if (!record?.id || record.fields?.storyboard_id !== storyboardId) return false;
   try {
-    const output = record.fields.storyboard_text;
-    assertUsableStoryboard(typeof output === 'string' ? JSON.parse(output) : output, scriptRecord, options);
+    const fields = structuredClone(record.fields);
+    if (typeof fields.storyboard_text === 'string' && !fields.storyboard_text.trim()) delete fields.storyboard_text;
+    const { output, warning } = readStoryboard(fields);
+    if (warning) return false;
+    assertUsableStoryboard(output, scriptRecord, options);
     return true;
   } catch {
     return false;
@@ -78,7 +88,9 @@ function seconds(value) {
 
 function checkTimes(item, expectedStart, expectedEnd, label, pointAllowed = false) {
   const keys = ['timestamp', 'time_range'].filter(key => item[key] !== undefined);
-  if (!keys.length) fail(label + ' needs a timestamp or time_range');
+  const numeric = ['start_seconds', 'end_seconds'].filter(key => item[key] !== undefined);
+  if (!keys.length && numeric.length !== 2) fail(label + ' needs a timestamp, time_range or numeric start/end seconds');
+  if (numeric.length && (numeric.length !== 2 || !numeric.every(key => typeof item[key] === 'number' && Number.isFinite(item[key])) || !close(item.start_seconds, expectedStart) || !close(item.end_seconds, expectedEnd))) fail(label + ' numeric times must match its approved source range');
   for (const key of keys) {
     if (typeof item[key] !== 'string') fail(label + '.' + key + ' must be a time string');
     const parts = item[key].trim().replace(/[–—]/g, '-').split(/\s*(?:-|→|\bto\b)\s*/i);
@@ -135,7 +147,7 @@ function assertStoryboardFidelity(storyboard, scriptRecord) {
         const object = typeof frame === 'object' && frame !== null;
         if (name !== 'structure2' && !object) fail(frameLabel + ' needs a detailed frame');
         if (object) {
-          if (name !== 'structure2' || frame.timestamp !== undefined || frame.time_range !== undefined) checkTimes(frame, scene.start, scene.end, frameLabel, true);
+          if (name !== 'structure2' || frame.timestamp !== undefined || frame.time_range !== undefined || frame.start_seconds !== undefined || frame.end_seconds !== undefined || frame.duration_seconds !== undefined) checkTimes(frame, scene.start, scene.end, frameLabel, true);
           checkNarration(frame, scene, frameLabel, name !== 'structure2');
           if (name === 'structure3' && !text(frame.image_prompt)) fail(frameLabel + ' needs an image prompt');
         }

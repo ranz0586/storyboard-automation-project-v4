@@ -1,3 +1,9 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFile} from 'node:fs/promises';
+import {CloudProductionStore} from '../../src/cloud/productionStore.js';
+import {CloudAuditStore} from '../../src/cloud/auditStore.js';
+import {executeCreation} from '../../src/cloud/productionWork.js';
+import {REFERENCE_ANALYSIS_SYSTEM} from '../../src/agents/referenceAnalysis/system.js';
 // Browser tests use the real Express routes, auth, run controllers, agents,
 // transforms, worker, scheduler and recovery. Only external services are fake.
 import { createApp } from '../../src/app.js';
@@ -93,6 +99,7 @@ const client = {
 };
 const gemini = { generate: async ({ system, prompt }) => {
   await new Promise(resolve => setTimeout(resolve, 100));
+  if (system === REFERENCE_ANALYSIS_SYSTEM) return {blueprint:{name:'Problem to result',promise:'One useful tip',opening:'Show a problem',progression:['Demonstrate one step'],payoff:'Reveal result',visualRules:'Readable frames',avoid:'Invented claims'},observations:[{kind:'estimated',statement:'The problem-to-result pattern may be reusable.',evidence:''}]};
   if (system === RESEARCH_SYSTEM) return { report: 'Test research' };
   if (system === IDEA_SYSTEM) return { concepts: Array.from({ length: Number(prompt.match(/Exactly (\d+) content concepts/)[1]) }, () => ({ title: `Science idea ${++sequence}`, topic: 'Science', emotional_angle: 'Curiosity', content_score: 90 })) };
   if (system === SCRIPT_SYSTEM) {
@@ -106,7 +113,10 @@ const gemini = { generate: async ({ system, prompt }) => {
 } };
 const telegram = { errorAlert: async value => { alerts.push({ type: 'error', value }); }, scriptsGeneratedAlert: async value => { alerts.push({ type: 'success', value }); } };
 const store = new RunStore(), schedules = new ScheduleStore();
-const app = createApp({ authOptions: { secureCookies: false, lockDir: 'data/ui-test-user-locks', loginRateLimiter: createRateLimiter({ limit: 1000 }) },
+const pg=new PGlite();await pg.exec(await readFile(new URL('../../src/cloud/schema.sql',import.meta.url),'utf8'));
+const productionDB={query:(...args)=>pg.query(...args),transaction:fn=>pg.transaction(fn)};
+const productionStore=new CloudProductionStore(productionDB),auditStore=new CloudAuditStore(productionDB);
+const app = createApp({productionStore,auditStore,dispatchCreation:async job=>{setTimeout(()=>executeCreation({db:productionDB,productionStore,auditStore,clients:()=>clients,withSlot:fn=>fn(),withLock:(_key,fn)=>fn()},job.id,'browser-'+job.id).catch(console.error),0);},dispatchAudit:async()=>{}, authOptions: { secureCookies: false, lockDir: 'data/ui-test-user-locks', loginRateLimiter: createRateLimiter({ limit: 1000 }) },
   makeAirtable: () => client, makeGemini: () => gemini, makeTelegram: () => telegram,
   runStore: store, scheduleStore: schedules,
   rateLimiter: createRateLimiter({ limit: 1000 }), readRateLimiter: createRateLimiter({ limit: 10000 }),

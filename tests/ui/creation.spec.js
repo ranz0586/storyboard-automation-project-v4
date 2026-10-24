@@ -1,0 +1,37 @@
+import {test,expect} from '@playwright/test';
+async function setup(page,name){
+ await page.goto('/');await page.getByRole('button',{name:'Create an account',exact:true}).click();
+ for(const [label,value] of Object.entries({'Full name':'Production Reviewer',Email:name+'@example.com',Username:name,Password:'test-password-123'}))await page.getByLabel(label,{exact:true}).fill(value);
+ await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByRole('button',{name:'+ New project',exact:true}).click();
+ for(const [label,value] of Object.entries({'Project name':name,Niche:'Science',Platform:'YouTube','Target audience':'Adults','Content style':'Edutainment'}))await page.getByLabel(label,{exact:true}).fill(value);
+ await page.getByRole('button',{name:'Create project',exact:true}).click();await page.getByRole('tab',{name:'Ideas',exact:true}).click();await page.getByText('Start from a topic, your script or a reference',{exact:true}).click();return page.locator('.creation-workspace');
+}
+test('cloud creation ports reference review, immutable versions and direct Draft variants',async({page,request})=>{
+ const area=await setup(page,'cloud-production');
+ await area.getByRole('combobox',{name:'Start with',exact:true}).selectOption('reference');await area.getByLabel('Reference text or image context',{exact:true}).fill('Show a problem. Demonstrate an experiment. Reveal the result.');
+ await area.getByRole('button',{name:'Analyze into draft blueprint',exact:true}).click();await expect(area.getByText('Problem to result · v1 · DRAFT',{exact:true})).toBeVisible();
+ await expect(area.getByRole('button',{name:'Make a variant',exact:true})).toHaveCount(0);
+ await area.getByText('Problem to result · v1 · DRAFT',{exact:true}).click();await area.getByLabel('Reason for blueprint approval',{exact:true}).fill('Reviewed the source and its stated evidence limitations.');await area.getByRole('button',{name:'Approve blueprint version',exact:true}).click();await expect(area.getByText('Problem to result · v1 · APPROVED',{exact:true})).toBeVisible();
+ await area.getByRole('combobox',{name:'Start with',exact:true}).selectOption('script');await area.getByLabel('Working title',{exact:true}).fill('Water experiment');await area.getByRole('textbox',{name:'Supplied script',exact:true}).fill('Show a useful water experiment, preserving uncertainty.');await area.getByRole('combobox',{name:'Optional blueprint',exact:true}).selectOption({label:'Problem to result · v1'});
+ await area.getByRole('button',{name:'Create one draft script',exact:true}).click();await expect(area.getByText('Draft saved. Open Scripts to review and approve it.',{exact:true})).toBeVisible();
+ await area.getByRole('button',{name:'Make a variant',exact:true}).click();await expect(area.getByRole('combobox',{name:'Optional blueprint',exact:true})).not.toHaveValue('');await expect(area.getByRole('textbox',{name:'Supplied script',exact:true})).toHaveValue('Show a useful water experiment, preserving uncertainty.');
+ await area.getByRole('button',{name:'Create one draft script',exact:true}).click();await expect(area.getByText('Draft saved. Open Scripts to review and approve it.',{exact:true})).toHaveCount(2);
+ const state=await(await request.get('/__test/state')).json();const project=state.projects.find(p=>p.fields.channel_page_name==='cloud-production'),rows=state.scripts.filter(s=>s.fields.Projects===project.fields.project_id);expect(rows).toHaveLength(2);expect(rows.every(s=>s.fields.status==='Draft')).toBeTruthy();expect(rows[0].fields.video_id).not.toBe(rows[1].fields.video_id);
+ const original=area.locator('details.run').filter({has:page.getByText('Problem to result · v1 · APPROVED',{exact:true})});
+ await original.getByText('Edit as a new version',{exact:true}).click();await original.getByRole('textbox',{name:'Opening pattern',exact:true}).fill('Frame the problem clearly');await original.getByRole('button',{name:'Save new blueprint version',exact:true}).click();await expect(area.getByText('Problem to result · v2 · DRAFT',{exact:true})).toBeVisible();
+ await original.getByRole('button',{name:'Archive blueprint version',exact:true}).click();await expect(area.getByRole('combobox',{name:'Optional blueprint',exact:true})).toHaveValue('');
+ for(const width of [1440,390]){await page.setViewportSize({width,height:1000});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:'test-results/cloud-production-'+width+'.png',fullPage:true});}
+ await page.getByRole('tab',{name:'Scripts',exact:true}).click();await page.getByRole('button',{name:'Refresh scripts',exact:true}).click();await page.locator('#scripts > details > summary').first().click();await page.getByRole('button',{name:'Approve for storyboard',exact:true}).click();expect((await request.post('/__test/storyboard/'+project.id)).ok()).toBeTruthy();await page.getByRole('button',{name:'Refresh project',exact:true}).click();await page.getByRole('tab',{name:'Storyboards',exact:true}).click();await expect(page.locator('#storyboards > details')).toHaveCount(1);
+});
+test('cloud image analysis accepts PNG and displays the limits of a still reference',async({page})=>{
+ const area=await setup(page,'cloud-image');await area.getByRole('combobox',{name:'Start with',exact:true}).selectOption('reference');await area.getByRole('combobox',{name:'Reference type',exact:true}).selectOption('image');
+ const upload=area.locator('input[type=file]');await upload.setInputFiles({name:'unsupported.txt',mimeType:'text/plain',buffer:Buffer.from('text')});await expect(area.getByRole('alert')).toContainText('PNG/JPEG');
+ await upload.setInputFiles({name:'reference.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWOQAAAAASUVORK5CYII=','base64')});await area.getByRole('button',{name:'Analyze into draft blueprint',exact:true}).click();await expect(area.getByText('Problem to result · v1 · DRAFT',{exact:true})).toBeVisible();await area.getByText('Problem to result · v1 · DRAFT',{exact:true}).click();await expect(area.getByText(/A still image does not establish motion/)).toBeVisible();
+});
+
+test('direct topic keeps unsaved input across tabs and retries the saved failed job',async({page,request})=>{
+ const area=await setup(page,'cloud-topic-retry');await area.getByLabel('Working title',{exact:true}).fill('Topic retry');await area.getByRole('textbox',{name:'Topic and instructions for this item',exact:true}).fill('Demonstrate one useful experiment.');
+ await page.getByRole('tab',{name:'Scripts',exact:true}).click();await page.getByRole('tab',{name:'Ideas',exact:true}).click();await expect(area.getByLabel('Working title',{exact:true})).toHaveValue('Topic retry');await request.post('/__test/fail-script');
+ await area.getByRole('button',{name:'Create one draft script',exact:true}).click();await expect(area.getByRole('status')).toHaveText('FAILED');await area.getByRole('button',{name:'Retry saved input',exact:true}).click();await expect(area.getByText('Draft saved. Open Scripts to review and approve it.',{exact:true})).toBeVisible();await expect(area.getByRole('status')).toHaveCount(1);
+ const state=await(await request.get('/__test/state')).json(),p=state.projects.find(p=>p.fields.channel_page_name==='cloud-topic-retry');expect(state.scripts.filter(s=>s.fields.Projects===p.fields.project_id)).toHaveLength(1);
+});

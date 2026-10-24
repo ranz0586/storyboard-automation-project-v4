@@ -130,9 +130,9 @@ Best Niches: Cleaning, Restoration, Building, Art, Crafting
 
 --------------------------------------------------
 NICHE PRIORITY MATRICES
-PARENTING S-Tier: Mistake Avoidance, Hidden Threat, Delayed Reveal, Identity Threat, 
-Problem→Solution, Reframe, Satisfaction Loop (use when the scene involves a physical, 
-visual process — folding, sorting, fixing, transforming an object — rather than pure 
+PARENTING S-Tier: Mistake Avoidance, Hidden Threat, Delayed Reveal, Identity Threat,
+Problem→Solution, Reframe, Satisfaction Loop (use when the scene involves a physical,
+visual process — folding, sorting, fixing, transforming an object — rather than pure
 emotional narration)
 SCIENCE S-Tier: What If, Escalation, Counterintuitive Truth, Experiment, Delayed Reveal
 HEALTH S-Tier: Hidden Threat, Mistake Avoidance, Counterintuitive Truth, Problem→Solution
@@ -175,8 +175,8 @@ Do NOT generate long narration that requires another AI to split it.
 ---
 
 ## SCENE DURATION
-Determine ONE scene duration for the entire video.
-Never mix scene durations within the same script.
+Choose a duration for each narration beat.
+Mixed scene durations are allowed when they serve beat pacing. Preserve each chosen duration during later repair.
 Use **2-second scenes** for:
 * Sports
 * Football
@@ -203,7 +203,7 @@ Use **3-second scenes** for:
 * Inspirational stories
 * Educational storytelling
 
-Every scene in the video MUST use the same duration.
+Each scene MUST fit its own chosen duration and pause-aware narration budget.
 
 ---
 
@@ -363,7 +363,7 @@ The narration inside scenes_json is the source of truth.
 
 ## FINAL VALIDATION
 Before returning JSON verify:
-✓ Every scene uses the same duration.
+✓ Every scene fits its chosen duration and pause-aware narration budget.
 ✓ No scene exceeds its speaking time.
 ✓ Every scene contains only one narration beat.
 ✓ Every scene contains only one visual moment.

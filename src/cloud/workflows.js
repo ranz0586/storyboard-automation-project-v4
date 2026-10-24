@@ -1,3 +1,4 @@
+import { executeCreation, executeAudit, reconcileProduction } from './productionWork.js';
 import { sleep, getWorkflowMetadata } from 'workflow';
 import { cloudContext } from './context.js';
 import { processIdeaScript } from '../scriptWorker.js';
@@ -282,6 +283,7 @@ async function maintain(actor) {
   }
   for (const run of await state.queued())
     if (!run.workflowId) await start(contentRunWorkflow, [run.id]);
+  await reconcileProduction(cloudContext(),(kind,id)=>start(productionWorkflow,[kind,id]),getRun);
   const lastPoll = await state.effect('storyboard:last-poll');
   if (
     config.pipeline.storyboardPollMs > 0 &&
@@ -312,4 +314,20 @@ async function maintain(actor) {
   await db.query('DELETE FROM app_rate_limits WHERE reset_at<now()');
 
   return true;
+}
+
+export async function productionWorkflow(kind,id){
+  'use workflow';
+  const actor=getWorkflowMetadata().workflowRunId;
+  let result=await executeProductionStep(kind,id,actor);
+  while(result?.deferredUntil){
+    await sleep(new Date(result.deferredUntil));
+    result=await executeProductionStep(kind,id,actor);
+  }
+}
+async function executeProductionStep(kind,id,actor){
+  'use step';
+  if(kind==='CREATION')return executeCreation(cloudContext(),id,actor);
+  if(kind==='AUDIT')return executeAudit(cloudContext(),id,actor);
+  throw Error('Unknown production workflow kind');
 }

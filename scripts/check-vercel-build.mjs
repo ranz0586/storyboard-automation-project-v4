@@ -20,6 +20,8 @@ const flow = JSON.parse(
   ),
 );
 assert.ok(flow.experimentalTriggers.some((trigger) => trigger.type === 'queue/v2beta'));
+assert.match(fs.readFileSync(new URL('functions/.well-known/workflow/v1/flow.func/index.mjs', root), 'utf8'), /productionWorkflow/);
+assert.match(fs.readFileSync(new URL('functions/__server.func/index.mjs', root), 'utf8'), /executeProductionStep/);
 const { default: handler } = await import(new URL('functions/__server.func/index.mjs', root));
 const server = createServer(handler);
 server.listen(0, '127.0.0.1');

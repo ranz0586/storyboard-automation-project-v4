@@ -1,3 +1,4 @@
+import { assertCreationScript } from './creation/contract.js';
 import { draftBrief, formWithBrief } from './briefs/contract.js';
 import { scriptAgent } from './agents/script/index.js';
 import { scriptValidationAgent } from './agents/scriptValidation/index.js';
@@ -39,7 +40,7 @@ export function isUsableScriptRecord(record) {
 // The one authoritative per-idea generation path. Normal runs, recovery,
 // manual runs, and scheduled runs all converge here and remain sequential in
 // their respective controllers.
-export async function processIdeaScript({ idea, concept, form, projectKey, gemini, airtable, briefStore, withLock = withFileLock }) {
+export async function processIdeaScript({ idea, concept, form, projectKey, gemini, airtable, briefStore, creation, withLock = withFileLock }) {
   const scriptId = scriptIdForIdea(idea);
   while (inFlight.has(scriptId)) await inFlight.get(scriptId);
   const execution = withLock(scriptId, () => processUnlocked({
@@ -49,7 +50,7 @@ export async function processIdeaScript({ idea, concept, form, projectKey, gemin
     form,
     projectKey,
     gemini,
-    airtable, briefStore,
+    airtable, briefStore, creation,
   }), { directory: config.locks.scriptDir });
   const completion = execution.then(() => undefined, () => undefined);
   inFlight.set(scriptId, completion);
@@ -60,21 +61,30 @@ export async function processIdeaScript({ idea, concept, form, projectKey, gemin
   }
 }
 
-async function processUnlocked({ scriptId, idea, concept, form, projectKey, gemini, airtable, briefStore }) {
+async function processUnlocked({ scriptId, idea, concept, form, projectKey, gemini, airtable, briefStore, creation }) {
   const existing = await airtable.findScriptByVideoId(scriptId);
   if (isUsableScriptRecord(existing)) {
     return { script: existing, generated: false, updated: false };
   }
 
-  const brief = projectKey && briefStore ? await briefStore.freeze(projectKey, scriptId, form) : draftBrief(form);
+  const brief = projectKey && briefStore ? await briefStore.freeze(projectKey, scriptId, form, 'script', creation) : draftBrief(form);
   form = formWithBrief(form, brief);
   const recentContent = await airtable.recentProjectContent?.(projectKey, { excludeIdeaId: idea.id, excludeVideoId: scriptId }) || [];
-  let script = await scriptAgent(gemini, { concept, form });
+  let script;
+  try { script = await scriptAgent(gemini, { concept, form }); }
+  catch (error) {
+    if (error.code === 'GEMINI_INVALID_JSON') error.message = 'Script generation failed: ' + error.message;
+    throw error;
+  }
   logger.mem(`script:${scriptId}:generated`);
   script = await scriptValidationAgent(gemini, { script, concept, form, recentContent });
   logger.mem(`script:${scriptId}:validated`);
-  const saved = await airtable.upsertScript(
-    flattenScript(script, { form, projectKey, scriptId })
-  );
+  assertCreationScript(script, brief);
+  let saved;
+  try { saved = await airtable.upsertScript(flattenScript(script, { form, projectKey, scriptId })); }
+  catch (error) {
+    if (error.code === 'DEFERRED') throw error;
+    throw Object.assign(error, { code: 'SCRIPT_PERSIST_FAILED' });
+  }
   return { script: saved, generated: true, updated: Boolean(saved.updated) };
 }

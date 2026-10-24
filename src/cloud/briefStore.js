@@ -15,10 +15,10 @@ export class CloudBriefStore {
   async get(projectKey, itemId) {
     return (await this.query('SELECT payload FROM app_item_briefs WHERE project_key=$1 AND item_id=$2', [projectKey, itemId])).rows[0]?.payload || null;
   }
-  async freeze(projectKey, itemId, form, origin = 'script') {
+  async freeze(projectKey, itemId, form, origin = 'script', creation) {
     const existing = await this.get(projectKey, itemId);
     if (existing) return existing;
-    const brief = snapshotBrief(projectKey, itemId, form, await this.defaults(projectKey), origin);
+    const brief = snapshotBrief(projectKey, itemId, form, await this.defaults(projectKey), origin, creation);
     // First writer wins across function instances; retries return its original snapshot.
     const result = await this.query('INSERT INTO app_item_briefs(project_key,item_id,payload) VALUES($1,$2,$3) ON CONFLICT(project_key,item_id) DO UPDATE SET item_id=EXCLUDED.item_id RETURNING payload', [projectKey, itemId, brief]);
     return result.rows[0].payload;

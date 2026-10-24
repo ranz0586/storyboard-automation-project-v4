@@ -401,7 +401,7 @@
       pre { white-space: pre-wrap; overflow-wrap: anywhere; }
       button:disabled { opacity: 0.5; cursor: not-allowed; }
       .auth { align-items: center; }
-    
+
 
 /* Ported saved-package reader and focused project workspace. */
 .production-values { margin: 12px 0; display: grid; gap: 12px; }
@@ -515,3 +515,8 @@ button:focus-visible, summary:focus-visible, input:focus-visible, textarea:focus
 .brief-context dd { margin: 0; }
 .output-settings textarea { resize: vertical; min-height: 120px; }
 .output-fields > .muted { margin-top: 12px; }
+
+.creation-workspace{margin-bottom:24px;padding:20px;border:1px solid var(--border,#2a354a);border-radius:12px;background:#121722}.creation-workspace>summary{font-weight:700;cursor:pointer}.creation-form,.creation-editor{display:grid;gap:16px;margin-block:24px}.creation-workspace label{display:grid;gap:8px}.creation-workspace p{max-width:72ch}.creation-history{margin-block:32px}.creation-workspace dd,.creation-workspace blockquote{overflow-wrap:anywhere}.creation-workspace .actions{flex-wrap:wrap}.creation-editor{max-width:850px}@media(max-width:600px){.creation-workspace{padding:16px}.creation-workspace .actions button{width:100%}}
+.creation-workspace fieldset{border:1px solid var(--border,#2a354a);border-radius:8px}.creation-workspace fieldset label{display:flex;align-items:center;gap:8px;margin-block:10px}.creation-workspace input[type=checkbox]{width:auto}
+
+.creation-workspace .creation-sources label{display:grid;align-items:start}

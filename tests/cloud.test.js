@@ -468,3 +468,25 @@ test('cloud replay retains frozen guidance and reuses provider checkpoints after
   assert.equal(frozen.language, 'English'); assert.equal(frozen.durationSeconds, 30); assert.equal(frozen.characterReferences, 'Blue coat');
   assert.ok(JSON.parse(saved.fields.scenes_json)[0].editorial_review.summary.hook_fulfilled);
 }));
+
+test('V1 parsed output alone is checkpointed; failed JSON and deferred attempts remain replayable', () => fixture(async db => {
+  const { GeminiClient } = await import('../src/clients/gemini.js');
+  let valid=false, calls=0;
+  const options={db,makeAirtable:()=>({}),makeTelegram:()=>({}),makeGemini:()=>new GeminiClient({
+    apiKeys:['synthetic'],primary:'primary',fallback:'fallback',keyPool:{size:1,acquire:async()=>({key:'synthetic',index:0})},
+    modelFactory:()=>({generateContent:async()=>{calls++;return {response:{text:()=>valid?'{"ok":true}':'{"bad":true,}',candidates:[{finishReason:'STOP'}]}};}}),
+  })};
+  const input={system:'safe',prompt:'same request',json:true};
+  await assert.rejects(createCloudContext(options).clients('v1:json').gemini.generate(input),error=>error.code==='GEMINI_INVALID_JSON'&&Number.isInteger(error.position));
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM app_effects')).rows[0].n,0);
+  valid=true;
+  assert.deepEqual(await createCloudContext(options).clients('v1:json').gemini.generate(input),{ok:true});
+  const completedCalls=calls;
+  assert.deepEqual(await createCloudContext(options).clients('v1:json').gemini.generate(input),{ok:true});
+  assert.equal(calls,completedCalls);
+  let attempts=0;
+  const deferred={...options,makeGemini:()=>({generate:async()=>{if(++attempts===1)throw Object.assign(Error('cooldown'),{code:'DEFERRED',retryAt:123});return {done:true};}})};
+  await assert.rejects(createCloudContext(deferred).clients('v1:deferred').gemini.generate(input),error=>error.code==='DEFERRED');
+  assert.deepEqual(await createCloudContext(deferred).clients('v1:deferred').gemini.generate(input),{done:true});
+  assert.equal(attempts,2);
+}));

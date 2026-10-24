@@ -27,9 +27,9 @@ export const briefIdentity = form => ({
 export function draftBrief(form) {
   return { version: 1, ...BriefSettingsSchema.parse({}), identity: briefIdentity(form), guidancePacks: [...DEFAULT_PACKS], origin: 'unpersisted' };
 }
-export function snapshotBrief(projectKey, itemId, form, settings, origin) {
+export function snapshotBrief(projectKey, itemId, form, settings, origin, creation) {
   if (typeof projectKey !== 'string' || !projectKey || typeof itemId !== 'string' || !itemId) throw new Error('Brief needs owning project and item identity');
-  return { ...draftBrief(form), ...BriefSettingsSchema.parse(settings), projectKey, itemId, origin, createdAt: new Date().toISOString() };
+  return { ...draftBrief(form), ...BriefSettingsSchema.parse(creation?.settings || settings), ...(creation ? {entry:creation.entry.mode,creation:{...creation.entry,blueprint:creation.blueprint,profileVersion:creation.entry.profile+'@1'},guidancePacks:[...DEFAULT_PACKS,...(creation.entry.mode==='script'?['source-adaptation@1']:[])]}:{}), projectKey, itemId, origin, createdAt: new Date().toISOString() };
 }
 export function formWithBrief(form, brief) {
   const identity = brief.identity;

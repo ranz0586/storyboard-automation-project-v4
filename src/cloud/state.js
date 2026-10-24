@@ -122,7 +122,7 @@ export class CloudState {
             const active = Number(
               (
                 await tx.query(
-                  "SELECT count(*) AS n FROM app_runs WHERE payload->>'status' IN ('QUEUED','RUNNING')",
+                  "SELECT (SELECT count(*) FROM app_runs WHERE payload->>'status' IN ('QUEUED','RUNNING'))+(SELECT count(*) FROM app_creation_jobs WHERE payload->>'status' IN ('QUEUED','RUNNING'))+(SELECT count(*) FROM app_audits WHERE payload->>'status' IN ('PENDING','RUNNING')) AS n",
                 )
               ).rows[0].n,
             );
@@ -150,7 +150,7 @@ export class CloudState {
       const active = Number(
         (
           await tx.query(
-            "SELECT count(*) AS n FROM app_runs WHERE payload->>'status' IN ('QUEUED','RUNNING')",
+            "SELECT (SELECT count(*) FROM app_runs WHERE payload->>'status' IN ('QUEUED','RUNNING'))+(SELECT count(*) FROM app_creation_jobs WHERE payload->>'status' IN ('QUEUED','RUNNING'))+(SELECT count(*) FROM app_audits WHERE payload->>'status' IN ('PENDING','RUNNING')) AS n",
           )
         ).rows[0].n,
       );

@@ -72,7 +72,7 @@ export class GeminiClient {
   // Primary + fallback share the acquired key: they count as one use. If BOTH
   // models 429 on a key (its daily quota is likely spent), rotate to the next
   // key from the pool instead of failing the call — up to one full lap.
-  async generate({ system, prompt, json = false }) {
+  async generate({ system, prompt, json = false, media }) {
     const keys = this.keyPool || pool();
     const maxKeyAttempts = Math.max(1, keys.size);
     let lastErr;
@@ -85,9 +85,17 @@ export class GeminiClient {
         try {
           const model = this.modelFactory
             ? this.modelFactory({ apiKey: key, name, system, json }) : this.#model(key, name, system, json);
-          const res = await generateWithServerRetry(model, prompt, this.retryOptions);
+          const res = await generateWithServerRetry(model, media?.length ? [{text:prompt},...media] : prompt, this.retryOptions);
           const text = res.response.text();
-          return json ? extractJson(text) : text;
+          if (!json) return text;
+          try { return extractJson(text); }
+          catch (error) {
+            const match = /position (\d+)/i.exec(error.message);
+            const position = match ? Number(match[1]) : undefined;
+            const finishReason = res.response.candidates?.[0]?.finishReason || 'UNKNOWN';
+            throw Object.assign(new Error('Gemini returned invalid JSON (model: ' + name + '; finish reason: ' + finishReason + ')'),
+              { code: 'GEMINI_INVALID_JSON', model: name, finishReason, ...(position !== undefined ? { position } : {}) });
+          }
         } catch (err) {
           lastErr = err;
           logger.warn(`Gemini ${label} model "${name}" failed (key #${index + 1})`, err?.message);

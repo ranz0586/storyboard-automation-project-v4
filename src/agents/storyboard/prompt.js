@@ -1,3 +1,4 @@
+import { creationGuidance } from '../../creation/contract.js';
 import { guidanceFor } from '../../creativeGuidance/index.js';
 import { structureSelectionInstruction } from '../../../shared/storyboardStructures.js';
 // User prompt template — equivalent of the n8n Storyboard Agent node's "text" (prompt) field.
@@ -63,5 +64,5 @@ Character References:
 ${JSON.stringify(p.character_references ?? null)}
 
 Style References:
-${JSON.stringify(p.style_references ?? null)}` + guidanceFor('storyboard', brief) + structureSelectionInstruction(brief);
+${JSON.stringify(p.style_references ?? null)}` + guidanceFor('storyboard', brief) + creationGuidance(brief) + structureSelectionInstruction(brief);
 }

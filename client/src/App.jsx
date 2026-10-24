@@ -1,3 +1,4 @@
+import CreationWorkspace from './CreationWorkspace.jsx';
 import OutputSettings, { FrozenOutputs } from './OutputSettings.jsx';
 import StoryboardPackage from './StoryboardPackage.jsx';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -243,6 +244,7 @@ function ProjectDetail({ id, api, notice, projectsChanged }) {
     }}>{projectSections.map((name, index) => <button key={name} type="button" role="tab" id={'project-tab-' + index} aria-selected={section === name} aria-controls={'project-panel-' + index} tabIndex={section === name ? 0 : -1} onClick={() => setSection(name)}>{name}</button>)}</div>
     {attention && section !== 'Activity' && <div className="activity-shortcut" role="status"><span>{['QUEUED', 'RUNNING'].includes(attention.status) ? 'Production in progress' : 'A run needs attention'}<small>{attention.processedCount}/{attention.requestedCount} processed · {attention.failedCount} failed</small></span><button className="secondary" onClick={() => setSection('Activity')}>View activity</button></div>}
     <div className="workspace-panel" role="tabpanel" tabIndex={0} id="project-panel-0" aria-labelledby="project-tab-0" hidden={section !== 'Ideas'}>
+    {project?.capabilities?.creation&&<CreationWorkspace key={base} base={base} api={api} disabled={!active||busy}/>}
     <div className="pipeline-start"><h3>Create draft scripts</h3><p>Research, ideas and validated scripts in one run. Review each Draft before storyboard generation.</p><form className="actions" onSubmit={event => { event.preventDefault(); action(async () => { const { run } = await api(`${base}/pipeline-runs`, { count: Number(pipelineCount) }); notice(`Full pipeline ${run.id.slice(0, 8)} queued`, 'success'); await loadRuns(); }); }}><input aria-label="Pipeline concept count" type="number" min="1" max="50" required value={pipelineCount} onChange={e => setPipelineCount(e.target.value)} /><button className="primary" disabled={generationDisabled}>Run full pipeline</button></form></div>
     <details className="manual-generation"><summary>Generate ideas or scripts separately</summary>
     <div className="grid two">

@@ -111,7 +111,7 @@ test('validation repairs narration, visuals and total duration before returning 
     assert.ok(args.json);
     assert.match(args.prompt, /180 WPM|150 and 180 WPM/);
     assert.match(args.prompt, /allowed 150/);
-    return reply(corrected);
+    const output = reply(corrected); output.scene_reviews.forEach(row => { row.source_scene_number = 1; }); return output;
   } }, { ...context, script: overcrowded });
   assert.equal(calls, 1);
   assert.equal(result.scenes.length, 2);
@@ -221,7 +221,7 @@ test('shared worker saves the corrected script only after both agents complete',
     gemini: { generate: async ({ system, prompt }) => {
       if (system === SCRIPT_SYSTEM) { order.push('script'); return { scripts: [script()] }; }
       order.push('validation'); assert.equal(scriptFromValidationPrompt(prompt).video.title, 'Water experiment');
-      return reply(corrected);
+      const output = reply(corrected); output.scene_reviews.forEach(row => { row.source_scene_number = 1; }); return output;
     } },
     airtable: { findScriptByVideoId: async () => null, upsertScript: async fields => { order.push('save');
       assert.equal(fields.estimated_duration_seconds, 6);
@@ -287,15 +287,14 @@ test('correction retains original duration and pause-aware budgets after a revie
   let calls = 0;
   const result = await scriptValidationAgent({ generate: async ({ prompt }) => {
     calls++;
-    const check = JSON.parse(prompt.split('DETERMINISTIC TIMING CHECK (word budgets account for before/after pauses):\n')[1].split('\n\nPREVIOUS VALIDATION ISSUES TO RESOLVE:')[0]);
-    assert.equal(check.required_scene_duration_seconds, 3);
+    const check = JSON.parse(prompt.split('DETERMINISTIC TIMING CHECK (word budgets account for before/after pauses):\n')[1].split('\n\nREQUIRED NARRATION REWRITES:')[0]);
     assert.equal(check.repair_budgets[0].duration_seconds, 3);
     assert.equal(check.repair_budgets[0].min_words, 8);
     assert.equal(check.repair_budgets[0].max_words, 8);
     if (calls === 1) return reply(stretched);
     assert.equal(scriptFromValidationPrompt(prompt).scenes[0].duration_seconds, 5);
-    assert.match(prompt, /expand under-length narration/);
-    assert.match(prompt, /Preserve the chosen scene duration of 3 seconds/);
+    assert.match(prompt, /Below min_words: expand/);
+    assert.match(prompt, /Preserve each original scene duration/);
     return reply(repaired);
   } }, { ...context, script: initial });
   assert.equal(calls, 2);

@@ -48,7 +48,7 @@ test('workspace keeps unsaved settings and idea selections across tabs, then res
 test('all formats show complete saved prompts and export safely without requesting future feature APIs', async ({ page, context }) => {
   const errors = [], unsupported = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('request', request => { if (/\/storyboard-audit|\/creation|\/blueprints|\/production-export/.test(new URL(request.url()).pathname)) unsupported.push(request.url()); });
+  page.on('request', request => { if (/\/storyboard-audit|\/production-export/.test(new URL(request.url()).pathname)) unsupported.push(request.url()); });
   await openProject(page, 'port-packages');
   const image = index => 'A complete scene image '.repeat(250) + 'IMAGE_END_' + index;
   const frames = Array.from({ length: 8 }, (_, index) => ({ frame: index + 1, timestamp: `${index * 3}s - ${(index + 1) * 3}s`, narration: 'Narration ' + (index + 1), image_prompt: image(index + 1), video_prompt: 'Animate scene ' + (index + 1) }));

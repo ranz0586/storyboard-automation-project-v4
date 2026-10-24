@@ -13,7 +13,7 @@ function script(narration = 'Water might behave differently when pressure change
   return { video: { video_id: 'editorial-test', title: 'Water', estimated_duration_seconds: 3, voiceover: { full_script: narration } }, scenes: [{ scene_number: 1, duration_seconds: 3, narration, tts: { pause_after_ms: 100 }, visual: { description: 'Water in a pressure chamber', image_prompt: 'Water in a pressure chamber', video_prompt: 'Show water in a pressure chamber' } }] };
 }
 function reply(candidate, history = []) {
-  return { approved: true, script: structuredClone(candidate), issues: [], editorial_review: editorialReply(candidate, history), scene_reviews: candidate.scenes.map(scene => ({ ...claimReply(scene), scene_number: scene.scene_number, visuals_match_narration: true, single_visual_moment: true, reason: 'Visuals support this useful final beat', claim_type: 'hypothesis' })) };
+  return { approved: true, script: structuredClone(candidate), issues: [], editorial_review: editorialReply(candidate, history), scene_reviews: candidate.scenes.map(scene => ({ ...claimReply(scene), scene_number: scene.scene_number, visuals_match_narration: true, single_visual_moment: true, reason: 'Visuals support this useful final beat', claim_type: 'hypothesis', uncertainty_explicit: /\b(may|might|could)\b/i.test(scene.narration), uncertainty_quote: scene.narration.match(/\b(may|might|could)\b/i)?.[0] || '' })) };
 }
 const form = { NICHE: 'Science', PLATFORM: 'YouTube Shorts' };
 const metadata = { url: 'https://www.youtube.com/watch?v=test', title: 'Water expiration date', view_count: 120 };
