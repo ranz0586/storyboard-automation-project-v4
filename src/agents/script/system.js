@@ -130,9 +130,9 @@ Best Niches: Cleaning, Restoration, Building, Art, Crafting
 
 --------------------------------------------------
 NICHE PRIORITY MATRICES
-PARENTING S-Tier: Mistake Avoidance, Hidden Threat, Delayed Reveal, Identity Threat,
-Problem→Solution, Reframe, Satisfaction Loop (use when the scene involves a physical,
-visual process — folding, sorting, fixing, transforming an object — rather than pure
+PARENTING S-Tier: Mistake Avoidance, Hidden Threat, Delayed Reveal, Identity Threat, 
+Problem→Solution, Reframe, Satisfaction Loop (use when the scene involves a physical, 
+visual process — folding, sorting, fixing, transforming an object — rather than pure 
 emotional narration)
 SCIENCE S-Tier: What If, Escalation, Counterintuitive Truth, Experiment, Delayed Reveal
 HEALTH S-Tier: Hidden Threat, Mistake Avoidance, Counterintuitive Truth, Problem→Solution
