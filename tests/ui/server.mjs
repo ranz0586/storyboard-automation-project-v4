@@ -2,7 +2,9 @@ import {PGlite} from '@electric-sql/pglite';
 import {readFile} from 'node:fs/promises';
 import {CloudProductionStore} from '../../src/cloud/productionStore.js';
 import {CloudAuditStore} from '../../src/cloud/auditStore.js';
-import {executeCreation} from '../../src/cloud/productionWork.js';
+import {validAuditReport} from '../helpers/storyboardAudit.js';
+import {STORYBOARD_AUDIT_SYSTEM} from '../../src/agents/storyboardAudit/system.js';
+import {auditInput,executeAudit,executeCreation} from '../../src/cloud/productionWork.js';
 import {REFERENCE_ANALYSIS_SYSTEM} from '../../src/agents/referenceAnalysis/system.js';
 // Browser tests use the real Express routes, auth, run controllers, agents,
 // transforms, worker, scheduler and recovery. Only external services are fake.
@@ -100,6 +102,7 @@ const client = {
 const gemini = { generate: async ({ system, prompt }) => {
   await new Promise(resolve => setTimeout(resolve, 100));
   if (system === REFERENCE_ANALYSIS_SYSTEM) return {blueprint:{name:'Problem to result',promise:'One useful tip',opening:'Show a problem',progression:['Demonstrate one step'],payoff:'Reveal result',visualRules:'Readable frames',avoid:'Invented claims'},observations:[{kind:'estimated',statement:'The problem-to-result pattern may be reusable.',evidence:''}]};
+  if (system === STORYBOARD_AUDIT_SYSTEM) return validAuditReport(JSON.parse(prompt.split('AUDIT_INPUT_JSON:\n')[1]));
   if (system === RESEARCH_SYSTEM) return { report: 'Test research' };
   if (system === IDEA_SYSTEM) return { concepts: Array.from({ length: Number(prompt.match(/Exactly (\d+) content concepts/)[1]) }, () => ({ title: `Science idea ${++sequence}`, topic: 'Science', emotional_angle: 'Curiosity', content_score: 90 })) };
   if (system === SCRIPT_SYSTEM) {
@@ -116,7 +119,7 @@ const store = new RunStore(), schedules = new ScheduleStore();
 const pg=new PGlite();await pg.exec(await readFile(new URL('../../src/cloud/schema.sql',import.meta.url),'utf8'));
 const productionDB={query:(...args)=>pg.query(...args),transaction:fn=>pg.transaction(fn)};
 const productionStore=new CloudProductionStore(productionDB),auditStore=new CloudAuditStore(productionDB);
-const app = createApp({productionStore,auditStore,dispatchCreation:async job=>{setTimeout(()=>executeCreation({db:productionDB,productionStore,auditStore,clients:()=>clients,withSlot:fn=>fn(),withLock:(_key,fn)=>fn()},job.id,'browser-'+job.id).catch(console.error),0);},dispatchAudit:async()=>{}, authOptions: { secureCookies: false, lockDir: 'data/ui-test-user-locks', loginRateLimiter: createRateLimiter({ limit: 1000 }) },
+const app = createApp({productionStore,auditStore,dispatchCreation:async job=>{setTimeout(()=>executeCreation({db:productionDB,productionStore,auditStore,clients:()=>clients,withSlot:fn=>fn(),withLock:(_key,fn)=>fn()},job.id,'browser-'+job.id).catch(console.error),0);},dispatchAudit:async job=>{setTimeout(()=>executeAudit({db:productionDB,auditStore,clients:()=>clients,withSlot:fn=>fn(),withLock:(_key,fn)=>fn()},job.id,'browser-audit-'+job.id).catch(console.error),0);}, authOptions: { secureCookies: false, lockDir: 'data/ui-test-user-locks', loginRateLimiter: createRateLimiter({ limit: 1000 }) },
   makeAirtable: () => client, makeGemini: () => gemini, makeTelegram: () => telegram,
   runStore: store, scheduleStore: schedules,
   rateLimiter: createRateLimiter({ limit: 1000 }), readRateLimiter: createRateLimiter({ limit: 10000 }),
@@ -156,5 +159,17 @@ app.post('/__test/scheduler', (_req, res) => {
 });
 app.post('/__test/storyboard/:projectId', async (req, res) => res.json(await runStoryboardPipeline({ clients, runStore: store, projectKeyFilter: byId(projects, req.params.projectId).fields.project_id })));
 app.post('/__test/recovery/:projectId', async (req, res) => res.json(await runIdeaRecovery({ clients, runStore: store, limit: 1, projectKeyFilter: byId(projects, req.params.projectId).fields.project_id })));
+app.post('/__test/audit/:projectId/:scriptId', async(req,res)=>{
+ const projectRecord=byId(projects,req.params.projectId),scriptRecord=byId(scripts,req.params.scriptId),storyboardRecord=storyboards.find(b=>b.fields.storyboard_id===scriptRecord.fields.video_id);
+ const input=await auditInput({projectRecord,scriptRecord,storyboardRecord,briefStore:app.locals.briefStore});
+ const enrollment=await auditStore.enroll({projectId:projectRecord.id,projectKey:projectRecord.fields.project_id,scriptId:scriptRecord.id,videoId:scriptRecord.fields.video_id});
+ const audit=await auditStore.pending({enrollment,input,retry:true});
+ await auditStore.change('app_audits',audit.id,value=>{
+  value.status=req.body.status||'COMPLETE';value.verdict=req.body.verdict||'PASS';value.report={...validAuditReport(input),verdict:value.verdict};value.acknowledgement=null;
+  if(req.body.issue)value.report.issues=[{id:'example',severity:req.body.blocking?'blocking':'editorial',category:'continuity',explanation:'Review the opening scene carefully.',evidence:'<script>unsafe()</script>',pointer:'/storyboard/structure1/0/image_prompt',scene_id:1}];
+ });
+ if(req.body.stale)storyboardRecord.fields.thumbnail_prompt='Changed after audit';
+ res.json({auditId:audit.id});
+});
 app.get('/__test/state', (_req, res) => res.json({ projects, ideas, scripts, storyboards, alerts, runs: store.list(), schedules: schedules.listEnabled() }));
 app.listen(3107, '127.0.0.1', () => console.log('UI fixture listening on 3107 (external services mocked)'));

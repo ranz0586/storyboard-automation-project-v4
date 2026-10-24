@@ -1,0 +1,22 @@
+.storyboard-audit { margin-block: 24px; padding-block: 20px; border-block: 1px solid var(--border); }
+.audit-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+.audit-heading h4 { margin: 0 0 8px; font-size: 18px; }
+.audit-heading p, .audit-readiness { max-width: 75ch; }
+.audit-heading p { color: var(--muted); margin: 0 0 16px; }
+.audit-state { font-size: 13px; white-space: nowrap; text-transform: capitalize; }
+.audit-findings { margin-top: 24px; }
+.audit-findings h5, .storyboard-audit > h5 { font-size: 16px; margin: 20px 0 12px; }
+.audit-finding { margin-top: 16px; padding: 18px; background: var(--bg); border-radius: 12px; overflow-wrap: anywhere; }
+.audit-finding p { max-width: 75ch; }
+.audit-issue-heading { display: flex; flex-wrap: wrap; gap: 12px; }
+.audit-issue-heading span { color: var(--muted); }
+.audit-finding blockquote { margin: 16px 0; padding: 0; color: var(--text); white-space: pre-wrap; }
+.audit-dimensions { display: grid; gap: 16px; margin: 20px 0; }
+.audit-dimensions dt { font-weight: 700; text-transform: capitalize; }
+.audit-dimensions dd { margin: 6px 0 0; }
+.audit-dimensions p { margin: 6px 0 0; max-width: 75ch; }
+.audit-acknowledgement { margin-top: 24px; }
+.audit-acknowledgement label { display: block; font-weight: 600; }
+.audit-acknowledgement textarea { display: block; margin-top: 8px; resize: vertical; }
+.audit-acknowledged { margin-top: 20px; }
+@media(max-width: 560px) { .audit-heading { flex-direction: column; gap: 0; margin-bottom: 16px; } .storyboard-audit .actions { align-items: stretch; } .storyboard-audit .actions button { width: 100%; } }

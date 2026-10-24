@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { readStoryboard, text, displayValue, timeRange, printableStoryboard, downloadFile } from './storyboard.js';
+
+import StoryboardAudit from './StoryboardAudit.jsx';
 
 function Values({ value }) {
   if (!value || typeof value !== 'object') return <p>{text(value)}</p>;
@@ -16,18 +18,29 @@ function Prompt({ label, value }) {
 }
 function Frame({ frame, index, paired = false, path }) {
   if (!frame || typeof frame !== 'object') return <p className="error">Invalid scene data.</p>;
-  return <article className="scene-card" data-storyboard-path={path} data-scene-id={frame.scene_number ?? index + 1} tabIndex={-1}><header><h5>{paired ? 'Scene' : 'Keyframe'} {text(frame.scene_number ?? frame.frame ?? index + 1)}</h5><span>{timeRange(frame)}</span></header>
+  return <article className="scene-card" data-storyboard-path={path} data-scene-id={frame.scene_number ?? frame.frame ?? index + 1} tabIndex={-1}><header><h5>{paired ? 'Scene' : 'Keyframe'} {text(frame.scene_number ?? frame.frame ?? index + 1)}</h5><span>{timeRange(frame)}</span></header>
     <div className="scene-content"><div className="preview-placeholder">No preview attached</div><div>
       <Values value={{ shot: frame.shot_type, camera: frame.camera ?? frame.camera_angle, visual: frame.visual ?? frame.visual_description,
         action: frame.character_action, expression: frame.facial_expression, narration: frame.narration ?? frame.caption_narration }} />
     </div></div><Prompt label="Prompt A / image" value={frame.image_prompt || frame.first_frame_prompt || (paired ? frame.panel_prompt : undefined)} />
     {paired && <Prompt label="Prompt B / animation" value={frame.video_prompt} />}</article>;
 }
-export default function StoryboardPackage({ fields, title }) {
+export default function StoryboardPackage({ fields, title, base, api, disabled }) {
+  const root=useRef(null);
+  const [auditData,setAuditData]=useState(null);
+  const auditStatus=auditData?.readiness?.status||'Unaudited';
+  function navigate(pointer,issue){
+    const relative=pointer.replace(/^\/storyboard/,'');
+    const cards=[...(root.current?.querySelectorAll('[data-storyboard-path]')||[])];
+    const target=cards.filter(el=>relative===el.dataset.storyboardPath||relative.startsWith(el.dataset.storyboardPath+'/')).sort((a,b)=>b.dataset.storyboardPath.length-a.dataset.storyboardPath.length)[0]||cards.find(el=>issue?.scene_id!=null&&el.dataset.sceneId===String(issue.scene_id));
+    if(target){target.scrollIntoView({block:'start',behavior:'auto'});target.focus({preventScroll:true});}
+  }
   const { output, warning, legacySummary } = readStoryboard(fields);
   const safeName = (title || 'storyboard').replace(/[^a-z0-9_-]/gi, '_').slice(0, 80);
-  return <div className="production-package">
-    <div className="actions production-toolbar"><button className="secondary" onClick={() => downloadFile(safeName + '-sheets.html', printableStoryboard(title, fields), 'text/html')}>Export printable sheets</button><button className="secondary" onClick={() => downloadFile(safeName + '.json', JSON.stringify(fields, null, 2), 'application/json')}>Export saved JSON</button></div>
+  return <div className="production-package" ref={root}>
+    <div className="actions production-toolbar"><button className="secondary" onClick={() => downloadFile(safeName + '-sheets.html', printableStoryboard(title, fields, {auditStatus}), 'text/html')}>Export printable sheets</button><button className="secondary" onClick={() => downloadFile(safeName + '.json', JSON.stringify(fields, null, 2), 'application/json')}>Export saved JSON</button></div>
+    {base && api && <StoryboardAudit base={base} api={api} disabled={disabled} onChange={setAuditData} onNavigate={navigate} />}
+    <p className="muted">Draft exports remain available. Production exports require a current review.</p>
     <p className="muted">All saved panels are shown. Timings are planned; prompts are not rendered media. Printable sheets keep full text and paginate long content.</p>
     {warning && <p className="error" role="alert">{warning}</p>}{legacySummary && <><p className="muted" role="note">Legacy storyboard: the summary is stored as text. Showing the saved structure fields.</p><p>{legacySummary}</p></>}{output.production_brief && <><h4>Saved production brief</h4><Values value={output.production_brief} /></>}
     <h4>Master assets and references</h4><Values value={output.master_assets} />

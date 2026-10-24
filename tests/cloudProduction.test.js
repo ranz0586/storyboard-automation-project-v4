@@ -173,3 +173,41 @@ test('failed immediate audit dispatch retains saved content and cron reconciles 
  await cloudControllers(new CloudState(db),async(fn,args)=>{starts.push(args);return {runId:'new'};},{productionContext:f.context,inspectWorkflow:()=>({exists:true,status:'running'})}).reconcile();
  assert.ok(starts.some(args=>args[0]==='AUDIT'&&args[1]===a.id));assert.equal(f.boards.length,1);assert.equal(f.scripts.length,1);
 });
+
+
+test('production export and editorial review enforce ownership, immutable report identity and current sources',async()=>{
+ await reset();const f=fixture(),j=await job();await executeCreation(f.context,j.id,'actor');const script=f.scripts[0];script.fields.status='Approved';await processScriptStoryboard({scriptRecord:script,clients:f.c,withLock:f.context.withLock});
+ const a=await audits.latest(project.id,script.id);await executeAudit(f.context,a.id,'audit');
+ let paused=false,mutateOnRead=false,reads=0;
+ const client=userClient({...f.c.airtable,getProject:async()=>({...project,fields:{...project.fields,status:paused?'Paused':'Active'}}),findStoryboardById:async id=>{const value=structuredClone(await f.c.airtable.findStoryboardById(id));if(mutateOnRead&&++reads===2)value.fields.thumbnail_prompt='Concurrent external change';return value;}});
+ const app=createApp({makeAirtable:()=>client,productionStore:store,auditStore:audits,briefStore:briefs,dispatchCreation:async()=>{},dispatchAudit:async()=>{},authOptions:{secureCookies:false},rateLimiter:createRateLimiter({limit:1000}),readRateLimiter:createRateLimiter({limit:1000})});
+ const server=app.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
+ try{
+  const headers={...await login(base),'Content-Type':'application/json'},route='/api/projects/'+project.id+'/scripts/'+script.id;
+  const get=path=>fetch(base+(path||route+'/production-export'),{headers});
+  const review=body=>fetch(base+route+'/storyboard-audit/review',{method:'POST',headers,body:JSON.stringify(body)});
+  const reason='Reviewed editorial limitations and accept this production plan.';
+  const calls=f.calls,original=(await audits.get(a.id)).report;
+  assert.equal((await fetch(base+route+'/production-export')).status,401);
+  assert.equal((await get()).status,200);
+  assert.equal((await get('/api/projects/other/scripts/'+script.id+'/production-export')).status,404);
+  mutateOnRead=true;reads=0;assert.equal((await get()).status,409);mutateOnRead=false;
+  await audits.change('app_audits',a.id,value=>{value.verdict='NEEDS_REVIEW';value.report.verdict='NEEDS_REVIEW';});
+  const editorial=(await audits.get(a.id)).report;
+  assert.equal((await get()).status,409);
+  assert.equal((await review({reason})).status,400);
+  assert.equal((await review({auditId:randomUUID(),reason})).status,409);
+  paused=true;assert.equal((await review({auditId:a.id,reason})).status,409);paused=false;
+  assert.equal((await review({auditId:a.id,reason})).status,200);
+  assert.equal((await review({auditId:a.id,reason})).status,200);
+  assert.equal((await review({auditId:a.id,reason:'A different review must not overwrite history.'})).status,409);
+  const saved=await audits.get(a.id);assert.deepEqual(saved.report,editorial);assert.equal(saved.verdict,'NEEDS_REVIEW');assert.ok(saved.acknowledgement.reviewerId);assert.equal(saved.acknowledgement.auditId,a.id);
+  paused=true;const exported=await get();assert.equal(exported.status,200);assert.deepEqual((await exported.json()).storyboard,f.boards[0]);paused=false;
+  await audits.change('app_audits',a.id,value=>{value.report.issues=[{severity:'blocking'}];});assert.equal((await get()).status,409);assert.equal((await review({auditId:a.id,reason})).status,409);
+  await audits.change('app_audits',a.id,value=>{value.report=editorial;});
+  script.fields.title='Externally changed Script';assert.equal((await get()).status,409);assert.equal((await review({auditId:a.id,reason})).status,409);script.fields.title='Experiment';
+  await audits.change('app_audits',a.id,value=>{value.fingerprint='old rubric';});assert.equal((await get()).status,409);
+  await pg.query('DELETE FROM app_audits WHERE id=$1',[a.id]);assert.equal((await get()).status,409);
+  assert.equal(f.calls,calls);assert.equal(original.verdict,'PASS');
+ }finally{await new Promise(resolve=>server.close(resolve));}
+});

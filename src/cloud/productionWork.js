@@ -3,7 +3,7 @@ import { referenceAnalysisAgent } from '../agents/referenceAnalysis/index.js';
 import { storyboardAuditAgent } from '../agents/storyboardAudit/index.js';
 import { buildAuditInput } from '../audits/contract.js';
 import { belongsToProject, assertProjectActive, projectKey } from '../utils/project.js';
-import { auditFingerprint } from './auditStore.js';
+import { auditFingerprint, reviewableAudit } from './auditStore.js';
 import { hash } from '../creation/contract.js';
 import { logger } from '../utils/logger.js';
 export function assertAuditOwnership(project,script,storyboard){
@@ -25,8 +25,8 @@ export async function auditState(store,context,input){
     audit={...value,stale:audit.fingerprint!==auditFingerprint(input)};
   }else if(await store.enrollment(context.projectRecord.id,context.scriptRecord.id))audit={id:null,status:'PENDING',stale:false};
   const checks=input.deterministic_checks.every(x=>x.passed);
-  const ready=checks&&audit?.status==='COMPLETE'&&!audit.stale&&audit.verdict==='PASS';
-  return {audit:audit||null,readiness:{ready:!!ready,status:!checks?'BLOCKED':!audit?'UNAUDITED':audit.stale?'STALE':ready?'READY':audit.status==='COMPLETE'?audit.verdict:audit.status}};
+  const ready=checks&&!!audit?.report&&!audit.report.issues?.some(issue=>issue.severity==='blocking')&&audit?.status==='COMPLETE'&&!audit.stale&&(audit.verdict==='PASS'||(reviewableAudit(audit)&&audit.acknowledgement?.auditId===audit.id&&audit.acknowledgement?.fingerprint===auditFingerprint(input)));
+  return {audit:audit||null,readiness:{ready:!!ready,reviewable:!!(checks&&audit&&!audit.stale&&reviewableAudit(audit)),reason:ready?'Current production plan accepted; rendered media has not been reviewed.':'A current completed audit without structural blockers is required. Editorial findings need a reasoned acknowledgement.',status:!checks?'BLOCKED':!audit?'UNAUDITED':audit.stale?'STALE':ready?'READY':audit.status==='COMPLETE'?audit.verdict:audit.status}};
 }
 export async function pendingAuditIntent({auditStore,...context}){
   const input=await auditInput(context),p=context.projectRecord,s=context.scriptRecord;

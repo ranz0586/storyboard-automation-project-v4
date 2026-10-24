@@ -194,7 +194,7 @@ export function createApp({
       const client = makeAirtable();
       const project = await client.getProject(req.params.id);
       const stats = await client.projectStats([project.fields.project_id]);
-      return res.json({ project: { ...project, capabilities: {creation:!!productionStore}, stats: stats[project.fields.project_id] } });
+      return res.json({ project: { ...project, capabilities: {creation:!!productionStore,audit:!!auditStore&&!!productionStore}, stats: stats[project.fields.project_id] } });
     } catch (err) {
       if (err?.statusCode === 404 || err?.status === 404) {
         return res.status(404).json({ error: 'Project not found' });

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { CloudProductionStore } from './productionStore.js';
 const identity=(projectId,scriptId)=>JSON.stringify([projectId,scriptId]);
 export const auditFingerprint=input=>JSON.stringify([input.package_hash,input.brief_hash,input.audit_version,input.rubric_version,input.evidence_scope]);
+export const reviewableAudit=audit=>audit?.status==='COMPLETE'&&audit.verdict==='NEEDS_REVIEW'&&!!audit.report&&!audit.report.issues?.some(issue=>issue.severity==='blocking');
 export class CloudAuditStore extends CloudProductionStore {
   async enrollment(projectId,scriptId){return (await this.query('SELECT payload FROM app_audit_enrollments WHERE id=$1',[identity(projectId,scriptId)])).rows[0]?.payload||null;}
   async enroll({projectId,projectKey,scriptId,videoId,source='EXPLICIT',beginGeneration=false}){
@@ -20,6 +21,20 @@ export class CloudAuditStore extends CloudProductionStore {
   async enrollments(){return (await this.query("SELECT payload FROM app_audit_enrollments WHERE payload->>'source'='GENERATION' AND payload->>'lifecycleCompleted'='false' ORDER BY created_at LIMIT 50")).rows.map(r=>r.payload);}
   async get(id){if(!/^[\da-f-]{36}$/i.test(id||''))return null;return (await this.query('SELECT payload FROM app_audits WHERE id=$1',[id])).rows[0]?.payload||null;}
   async latest(projectId,scriptId){return (await this.query('SELECT payload FROM app_audits WHERE project_id=$1 AND script_id=$2 ORDER BY sequence DESC LIMIT 1',[projectId,scriptId])).rows[0]?.payload||null;}
+  async acknowledge({projectId,scriptId,auditId,input,reviewerId,reason}){
+    if(typeof reviewerId!=='string'||!reviewerId||typeof reason!=='string'||reason.trim().length<10||reason.trim().length>2000)throw Object.assign(Error('A reviewer and reason are required'),{statusCode:400});
+    return this.transaction(async tx=>{
+      await tx.query('SELECT id FROM app_audit_enrollments WHERE id=$1 FOR UPDATE',[identity(projectId,scriptId)]);
+      const audit=(await tx.query('SELECT payload FROM app_audits WHERE project_id=$1 AND script_id=$2 ORDER BY sequence DESC LIMIT 1 FOR UPDATE',[projectId,scriptId])).rows[0]?.payload;
+      if(audit?.id!==auditId||audit.fingerprint!==auditFingerprint(input)||!input.deterministic_checks.every(check=>check.passed)||!reviewableAudit(audit))throw Object.assign(Error('Refresh the current review; blocking or stale audits cannot be acknowledged'),{statusCode:409});
+      if(audit.acknowledgement){
+        if(audit.acknowledgement.reviewerId!==reviewerId||audit.acknowledgement.reason!==reason.trim())throw Object.assign(Error('The saved acknowledgement is immutable'),{statusCode:409});
+        return audit;
+      }
+      audit.acknowledgement={reviewerId,reason:reason.trim(),auditId:audit.id,fingerprint:audit.fingerprint,createdAt:new Date().toISOString()};
+      await tx.query('UPDATE app_audits SET payload=$2 WHERE id=$1',[audit.id,audit]);return audit;
+    });
+  }
   async pending({enrollment,input,retry=false,manual=false}){
     return this.transaction(async tx=>{
       await tx.query('SELECT id FROM app_audit_enrollments WHERE id=$1 FOR UPDATE',[enrollment.id]);

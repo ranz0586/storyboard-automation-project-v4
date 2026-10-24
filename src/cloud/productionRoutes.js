@@ -5,6 +5,7 @@ import { EntrySchema, ReferenceSchema, BlueprintSchema, hash } from '../creation
 import { assertProjectActive, projectKey, belongsToProject } from '../utils/project.js';
 import { formFromProject } from '../ideaGeneration.js';
 import { publicJob } from './productionStore.js';
+import { auditFingerprint } from './auditStore.js';
 import { auditInput, auditState } from './productionWork.js';
 const request=z.discriminatedUnion('type',[
   z.object({requestId:z.string().uuid(),type:z.literal('SCRIPT'),entry:EntrySchema}).strict(),
@@ -55,6 +56,22 @@ export function mountProductionRoutes(app,{store,auditStore,briefStore,makeAirta
     return {context,input:await auditInput(context)};
   };
   app.get('/api/projects/:id/scripts/:scriptId/storyboard-audit',protect(async(req,res)=>{const {context,input}=await loadAudit(req);res.json(await auditState(auditStore,context,input));}));
+  app.post('/api/projects/:id/scripts/:scriptId/storyboard-audit/review',validateBody(z.object({auditId:z.string().uuid(),reason:z.string().trim().min(10).max(2000)}).strict()),protect(async(req,res)=>{
+    const {context,input}=await loadAudit(req);assertProjectActive(context.projectRecord);
+    await auditStore.acknowledge({projectId:req.params.id,scriptId:req.params.scriptId,...req.validatedBody,input,reviewerId:req.user.id});
+    const current=await loadAudit(req),state=await auditState(auditStore,current.context,current.input);
+    if(auditFingerprint(input)!==auditFingerprint(current.input)||state.audit?.id!==req.validatedBody.auditId)return res.status(409).json({error:'Package changed during review. Refresh the current audit.'});
+    res.json(state);
+  }));
+  app.get('/api/projects/:id/scripts/:scriptId/production-export',protect(async(req,res)=>{
+    const loaded=await loadAudit(req),state=await auditState(auditStore,loaded.context,loaded.input);
+    if(!state.readiness.ready)return res.status(409).json({...state,error:'Refresh the audit and resolve its findings before production export.'});
+    // Airtable and PostgreSQL cannot be frozen together; refuse observed changes and export only this checked snapshot.
+    const current=await loadAudit(req),latest=await auditState(auditStore,current.context,current.input);
+    const snapshot=value=>hash({project:value.context.projectRecord,script:value.context.scriptRecord,storyboard:value.context.storyboardRecord,input:value.input});
+    if(snapshot(loaded)!==snapshot(current)||latest.audit?.id!==state.audit.id||!latest.readiness.ready||hash(latest.audit)!==hash(state.audit))return res.status(409).json({error:'Package changed during export. Refresh and try again.'});
+    res.json({script:loaded.context.scriptRecord,storyboard:loaded.context.storyboardRecord,...state});
+  }));
   app.post('/api/projects/:id/scripts/:scriptId/storyboard-audit',validateBody(empty),protect(async(req,res)=>{
     const {context,input}=await loadAudit(req);assertProjectActive(context.projectRecord);
     const enrollment=await auditStore.enroll({projectId:req.params.id,projectKey:projectKey(context.projectRecord),scriptId:context.scriptRecord.id,videoId:context.scriptRecord.fields.video_id,source:'EXPLICIT'});
